@@ -11,6 +11,7 @@
     "date-fns": "4.1.0",
     "dotenv": "16.5.0",
     "es-toolkit": "1.39.3",
+    "fast-csv": "5.0.2",
     "pdfjs-dist": "5.3.31",
     "playwright": "1.52.0",
     "rehype-parse": "9.0.1",
