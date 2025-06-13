@@ -1,9 +1,20 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 import { groupBy } from 'es-toolkit';
-import { type CrawHref, Crawler } from '@/lib/nlp/crawler';
+import natural from 'natural';
+import {
+  extractFootnote,
+  injectFootnote,
+  removeAllFootnote,
+} from '@/lib/footnoteUtils';
+import { Crawler, type GetChaptersFunction } from '@/lib/nlp/crawler';
 import { getPageId, getSentenceId } from '@/lib/nlp/getId';
-import { type Page, type SingleLanguageSentence } from '@/lib/nlp/schema';
+import {
+  type Footnote,
+  type PageInput,
+  type SingleLanguageSentence,
+} from '@/lib/nlp/schema';
+import { logger } from '@/logger/logger';
 
 const main = async () => {
   const bibleMetadata = JSON.parse(
@@ -30,18 +41,19 @@ const main = async () => {
               href: `${baseURL}/${chapter.number}/${chapter.number}.json`,
               props: {
                 chapterNumber: chapter.number as number,
+                mdHref: `${baseURL}/${chapter.number}/${chapter.number}.md`,
               },
-            } satisfies Required<
-              CrawHref<{
-                chapterNumber: number;
-              }>
-            >;
+            } satisfies Awaited<ReturnType<GetChaptersFunction>>[number];
           },
         ) || []
       );
     },
     getPageContent: async ({ resourceHref, chapterParams }) => {
-      const { verses } = await (await fetch(resourceHref.href)).json();
+      const {
+        verses,
+        footnotes = [],
+        references = [],
+      } = await (await fetch(resourceHref.href)).json();
 
       const groupByParagraph = groupBy(
         verses,
@@ -59,18 +71,137 @@ const main = async () => {
           id: paragraphId,
           number: pageNumber,
           sentences:
-            groupByParagraph[key]?.map((verse) => {
-              return {
-                id: getSentenceId({
+            groupByParagraph[key]
+              ?.flatMap((verse) => {
+                // NOTE: The problem is verse footnotes and refs are calculated
+                // for a verse, which may contains multiple sentences. However,
+                // in the next steps, we will split into multiple sentences, we
+                // have to put refs back and then extract footnotes and refs
+                // again for each sentence.
+
+                const verseFootnotes = footnotes
+                  .filter(
+                    (fn: Record<string, unknown>) => fn.verseId === verse.id,
+                  )
+                  .map((fn: Record<string, unknown>) => {
+                    return {
+                      text: fn.content as string,
+                      position: fn.position as number,
+                      label: `${fn.order}` as string,
+                    };
+                  });
+
+                const verseRefs = references
+                  .filter(
+                    (ref: Record<string, unknown>) => ref.verseId === verse.id,
+                  )
+                  .map((ref: Record<string, unknown>) => {
+                    return {
+                      text: ref.content as string,
+                      position: ref.position as number,
+                      // NOTE: We add asterisk to the label to indicate it's a
+                      // reference and not a footnote.
+                      label: `${ref.order}*`,
+                    };
+                  });
+
+                const verseWithFootnotesAndRefs = injectFootnote(
+                  verse.content as string,
+                  [...verseFootnotes, ...verseRefs],
+                );
+
+                const tokenizer = new natural.SentenceTokenizer([]);
+
+                // NOTE: Since some verses might have multiple sentences, we have
+                // to use tokenizer to split them into sentences.
+                const sentences = tokenizer.tokenize(verseWithFootnotesAndRefs);
+
+                return sentences.map((sentence) => {
+                  // First, we extract footnotes and references from the split
+                  // sentence.
+                  const sentenceFootnotes = extractFootnote(
+                    sentence,
+                    /\[(?<label>[a-zA-Z0-9*]+)\]/gm,
+                  ).flatMap((fn) => {
+                    const isReference = fn.label.endsWith('*');
+
+                    let verseFootnote: Record<string, unknown> | null = null;
+
+                    // Then we find the corresponding footnote or
+                    // reference
+                    if (isReference) {
+                      verseFootnote = verseRefs.find(
+                        (r: Record<string, unknown>) => r.label === fn.label,
+                      );
+                    } else {
+                      verseFootnote = verseFootnotes.find(
+                        (f: Record<string, unknown>) => f.label === fn.label,
+                      );
+                    }
+
+                    if (!verseFootnote) {
+                      logger.warn(
+                        `Footnote or reference not found for label: ${fn.label}`,
+                      );
+                      return [];
+                    }
+
+                    return [
+                      {
+                        text: verseFootnote.text as string,
+                        label: fn.label,
+                        position: fn.position,
+                      } satisfies Footnote,
+                    ];
+                  });
+
+                  return {
+                    type: 'single',
+                    text: removeAllFootnote(sentence) as string,
+                    footnotes: sentenceFootnotes,
+                    extraAttributes: {
+                      verseNumber: verse.number as number,
+                      verseOrder: verse.order as number,
+                      // NOTE: Start from 0 for parNumber and parIndex
+                      parNumber: verse.parNumber as number,
+                      parIndex: verse.parIndex as number,
+                      isPoetry: verse.isPoetry as boolean,
+                    },
+                  } satisfies Omit<
+                    SingleLanguageSentence,
+                    'id' | 'footnotes'
+                  > & {
+                    footnotes: Footnote[];
+                  };
+                });
+              })
+              .map((sentence, sentenceNumber) => {
+                const newSentenceId = getSentenceId({
                   ...chapterParams,
                   pageNumber,
-                  sentenceNumber: verse.number as number,
-                }),
-                text: verse.content as string,
-              } satisfies SingleLanguageSentence;
-            }) || [],
-        } satisfies Page;
+                  sentenceNumber: sentenceNumber + 1,
+                });
+                return {
+                  ...sentence,
+                  id: newSentenceId,
+                  footnotes: sentence.footnotes.map((fn, idx) => ({
+                    ...fn,
+                    order: idx,
+                    sentenceId: newSentenceId,
+                  })),
+                } satisfies SingleLanguageSentence;
+              }) || [],
+        } satisfies PageInput;
       });
+    },
+    getPageContentMd: async ({ resourceHref }) => {
+      if (!resourceHref.props?.mdHref) {
+        throw new Error('Markdown href is not provided');
+      }
+
+      const md = await (await fetch(resourceHref.props.mdHref)).text();
+
+      return md;
     },
   });
 
