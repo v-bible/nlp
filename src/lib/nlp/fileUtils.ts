@@ -17,7 +17,9 @@ const writeChapterContent = ({
   extension: string;
   documentTitle?: string;
 }) => {
-  const baseFolder = `${baseDir}/${params.domain}/${params.subDomain}/${params.genre}`;
+  // NOTE: We write to genre dir directly instead of
+  // baseDir/domain/subDomain/genre to reduce complexity
+  const baseFolder = `${baseDir}/${params.genre}`;
 
   const documentId = getDocumentId(params);
 

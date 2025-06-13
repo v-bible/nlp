@@ -13,6 +13,8 @@ import {
   MetadataSchema,
   type Page,
   PageSchema,
+  type Sentence,
+  type SentenceFootnote,
 } from '@/lib/nlp/schema';
 
 const newLineIndent = (level: number, indentationSize = 2) => {
@@ -112,108 +114,156 @@ const generateXML = (
     chapterNumber,
   });
 
-  const xmlTree = u('root', [
-    newLineIndent(0),
-    x(
-      'FILE',
-      { ID: documentId, NUMBER: parseMetadata.documentNumber },
-      ...generateIndent(1, [
-        x(
-          'meta',
-          {},
-          ...generateIndent(2, [
-            x('DOCUMENT_ID', documentId),
-            x('DOCUMENT_NUMBER', parseMetadata.documentNumber),
-            x(
-              'GENRE',
-              {},
-              ...generateIndent(3, [
-                x('CODE', parseMetadata.genre.code),
-                x('CATEGORY', parseMetadata.genre.category),
-                x('VIETNAMESE', parseMetadata.genre.vietnamese),
-              ]),
-            ),
-            x(
-              'TAGS',
-              {},
-              ...generateIndent(3, [
-                ...(parseMetadata.tags?.map(({ category, vietnamese }) => {
-                  return x(
-                    'TAG',
-                    {},
-                    ...generateIndent(4, [
-                      x('CATEGORY', category),
-                      x('VIETNAMESE', vietnamese),
-                    ]),
-                  );
-                }) || []),
-              ]),
-            ),
-            x('TITLE', parseMetadata.title),
-            x('VOLUME', parseMetadata.volume),
-            x('AUTHOR', parseMetadata.author),
-            x('SOURCE_TYPE', parseMetadata.sourceType),
-            x('SOURCE_URL', parseMetadata.sourceURL),
-            x('SOURCE', parseMetadata.source),
-            x('HAS_CHAPTERS', parseMetadata.hasChapters ? 'true' : 'false'),
-            x('PERIOD', parseMetadata.period),
-            x('PUBLISHED_TIME', parseMetadata.publishedTime),
-            x('LANGUAGE', parseMetadata.language),
-            x('NOTE', parseMetadata.note),
-          ]),
-        ),
+  let aggregatedFootnotes: SentenceFootnote[] = [];
 
-        x(
-          'SECT',
-          {
-            ID: chapterId,
-            NAME: parseMetadata.chapterName,
-            NUMBER: chapterNumber,
-          },
-          ...generateIndent(
-            2,
-            parsePages.map((page) => {
-              return x(
-                'PAGE',
-                { ID: page.id, NUMBER: page.number },
-                ...generateIndent(
-                  3,
-                  page.sentences.map((sentence) => {
-                    if ('text' in sentence) {
-                      return x(
-                        'STC',
-                        {
-                          ID: sentence.id,
-                        },
-                        transformString(sentence.text),
-                      );
-                    }
+  const pagesMap = parsePages.map((page) => {
+    return x(
+      'PAGE',
+      {
+        ID: page.id,
+        NUMBER: page.number,
+      },
+      ...generateIndent(
+        4,
+        page.sentences.map((sentence) => {
+          const extraAttributes = sentence?.extraAttributes;
+          const newExtraAttributes: Record<string, string> = {};
 
+          if (extraAttributes) {
+            Object.entries(extraAttributes).forEach(([key, value]) => {
+              // NOTE: Convert camelCase to snake_case then to UPPERCASE
+              const newKey = key
+                .replace(/([a-z])([A-Z])/g, '$1_$2')
+                .toUpperCase();
+
+              newExtraAttributes[newKey] = String(value);
+            });
+          }
+
+          if ('text' in sentence) {
+            aggregatedFootnotes = [
+              ...aggregatedFootnotes,
+              ...(sentence.footnotes || []),
+            ];
+
+            return x(
+              'STC',
+              {
+                ID: sentence.id,
+                ...newExtraAttributes,
+              },
+              transformString(sentence.text),
+            );
+          }
+
+          return x(
+            'STC',
+            {
+              ID: sentence.id,
+            },
+            ...generateIndent(
+              5,
+              sentence.array.map((lang) => {
+                aggregatedFootnotes = [
+                  ...aggregatedFootnotes,
+                  ...(lang.footnotes || []),
+                ];
+
+                return x(lang.languageCode, {}, transformString(lang.text));
+              }),
+            ),
+          );
+        }),
+      ),
+    );
+  });
+
+  const xmlTree = x(
+    'root',
+    {},
+    ...generateIndent(1, [
+      x(
+        'FILE',
+        { ID: documentId, NUMBER: parseMetadata.documentNumber },
+        ...generateIndent(2, [
+          x(
+            'meta',
+            {},
+            ...generateIndent(3, [
+              x('DOCUMENT_ID', documentId),
+              x('DOCUMENT_NUMBER', parseMetadata.documentNumber),
+              x(
+                'GENRE',
+                {},
+                ...generateIndent(4, [
+                  x('CODE', parseMetadata.genre.code),
+                  x('CATEGORY', parseMetadata.genre.category),
+                  x('VIETNAMESE', parseMetadata.genre.vietnamese),
+                ]),
+              ),
+              x(
+                'TAGS',
+                {},
+                ...generateIndent(4, [
+                  ...(parseMetadata.tags?.map(({ category, vietnamese }) => {
                     return x(
-                      'STC',
+                      'TAG',
+                      {},
+                      ...generateIndent(5, [
+                        x('CATEGORY', category),
+                        x('VIETNAMESE', vietnamese),
+                      ]),
+                    );
+                  }) || []),
+                ]),
+              ),
+              x('TITLE', parseMetadata.title),
+              x('VOLUME', parseMetadata.volume),
+              x('AUTHOR', parseMetadata.author),
+              x('SOURCE_TYPE', parseMetadata.sourceType),
+              x('SOURCE_URL', parseMetadata.sourceURL),
+              x('SOURCE', parseMetadata.source),
+              x('HAS_CHAPTERS', parseMetadata.hasChapters ? 'true' : 'false'),
+              x('PERIOD', parseMetadata.period),
+              x('PUBLISHED_TIME', parseMetadata.publishedTime),
+              x('LANGUAGE', parseMetadata.language),
+              x('NOTE', parseMetadata.note),
+            ]),
+          ),
+
+          x(
+            'SECT',
+            {
+              ID: chapterId,
+              NAME: parseMetadata.chapterName,
+              NUMBER: chapterNumber,
+            },
+            ...generateIndent(3, [
+              pagesMap,
+              x(
+                'FOOTNOTES',
+                {},
+                ...generateIndent(
+                  4,
+                  aggregatedFootnotes.map((footnote) => {
+                    return x(
+                      'FOOTNOTE',
                       {
-                        ID: sentence.id,
+                        SENTENCE_ID: footnote.sentenceId,
+                        LABEL: footnote.label,
+                        POSITION: footnote.position,
                       },
-                      ...generateIndent(
-                        4,
-                        sentence.array.map((lang) => {
-                          return x(
-                            lang.languageCode,
-                            {},
-                            transformString(lang.text),
-                          );
-                        }),
-                      ),
+                      footnote.text,
                     );
                   }),
                 ),
-              );
-            }),
+              ),
+            ]),
           ),
-        ),
-      ]),
-    ),
-  ]);
+        ]),
+      ),
+    ]),
+  );
 
   // Convert the tree to XML string
   return toXml(xmlTree).trim();
@@ -267,61 +317,80 @@ const generateJson = (
     chapterNumber,
   });
 
-  const jsonTree = {
-    file: {
-      id: documentId,
-      number: parseMetadata.documentNumber,
-      meta: {
-        documentId,
-        documentNumber: parseMetadata.documentNumber,
-        genre: {
-          code: parseMetadata.genre.code,
-          category: parseMetadata.genre.category,
-          vietnamese: parseMetadata.genre.vietnamese,
-        },
-        tags: parseMetadata.tags,
-        title: parseMetadata.title,
-        volume: parseMetadata.volume,
-        author: parseMetadata.author,
-        sourceType: parseMetadata.sourceType,
-        sourceURL: parseMetadata.sourceURL,
-        source: parseMetadata.source,
-        chapterName: parseMetadata.chapterName,
-        hasChapters: parseMetadata.hasChapters,
-        period: parseMetadata.period,
-        publishedTime: parseMetadata.publishedTime,
-        language: parseMetadata.language,
-        note: parseMetadata.note,
-      },
+  let aggregatedFootnotes: SentenceFootnote[] = [];
 
-      sect: {
-        id: chapterId,
-        name: parseMetadata.chapterName,
-        number: chapterNumber,
-        pages: parsePages.map((page) => {
+  const pagesMap = parsePages.map((page) => {
+    return {
+      id: page.id,
+      number: page.number,
+      sentences: page.sentences.map((sentence) => {
+        if ('text' in sentence) {
+          aggregatedFootnotes = [
+            ...aggregatedFootnotes,
+            ...(sentence.footnotes || []),
+          ];
+
           return {
-            id: page.id,
-            number: page.number,
-            sentences: page.sentences.map((sentence) => {
-              if ('text' in sentence) {
-                return {
-                  id: sentence.id,
-                  text: transformString(sentence.text),
-                };
-              }
-
-              return {
-                id: sentence.id,
-                array: sentence.array.map((lang) => {
-                  return {
-                    languageCode: lang.languageCode,
-                    text: transformString(lang.text),
-                  };
-                }),
-              };
-            }),
+            id: sentence.id,
+            extraAttributes: sentence.extraAttributes,
+            text: transformString(sentence.text),
           };
-        }),
+        }
+
+        return {
+          id: sentence.id,
+          extraAttributes: sentence.extraAttributes,
+          array: sentence.array.map((lang) => {
+            aggregatedFootnotes = [
+              ...aggregatedFootnotes,
+              ...(lang.footnotes || []),
+            ];
+
+            return {
+              languageCode: lang.languageCode,
+              text: transformString(lang.text),
+            };
+          }),
+        };
+      }) satisfies Sentence[],
+    };
+  });
+
+  const jsonTree = {
+    root: {
+      file: {
+        id: documentId,
+        number: parseMetadata.documentNumber,
+        meta: {
+          documentId,
+          documentNumber: parseMetadata.documentNumber,
+          genre: {
+            code: parseMetadata.genre.code,
+            category: parseMetadata.genre.category,
+            vietnamese: parseMetadata.genre.vietnamese,
+          },
+          tags: parseMetadata.tags,
+          title: parseMetadata.title,
+          volume: parseMetadata.volume,
+          author: parseMetadata.author,
+          sourceType: parseMetadata.sourceType,
+          sourceURL: parseMetadata.sourceURL,
+          source: parseMetadata.source,
+          chapterName: parseMetadata.chapterName,
+          hasChapters: parseMetadata.hasChapters,
+          period: parseMetadata.period,
+          publishedTime: parseMetadata.publishedTime,
+          language: parseMetadata.language,
+          note: parseMetadata.note,
+        },
+
+        sect: {
+          id: chapterId,
+          name: parseMetadata.chapterName,
+          number: chapterNumber,
+          pages: pagesMap,
+          footnotes: aggregatedFootnotes,
+        },
       },
     },
   } satisfies ChapterTree;

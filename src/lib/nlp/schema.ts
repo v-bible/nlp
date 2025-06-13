@@ -19,6 +19,10 @@ export const CategorySchema = z.object({
 
 export type Category = z.infer<typeof CategorySchema>;
 
+export const CamelCaseStringSchema = z.string().regex(/^[a-z][a-zA-Z0-9]*$/, {
+  message: 'String must be in camelCase format',
+});
+
 export const IdParamsSchema = z.object({
   domain: z.enum(domainCategories.map((c) => c.code)),
   subDomain: z.enum(subDomainCategories.map((c) => c.code)),
@@ -163,9 +167,27 @@ export const MetadataRowCSVSchema = MetadataSchema.omit({
 export type MetadataRowCSV = z.infer<typeof MetadataRowCSVSchema>;
 export type MetadataRowCSVInput = z.input<typeof MetadataRowCSVSchema>;
 
+export const FootnoteSchema = z.object({
+  label: z.string(),
+  text: z.string(),
+  position: z.number().gte(0),
+});
+
+export type Footnote = z.infer<typeof FootnoteSchema>;
+
+export const SentenceFootnoteSchema = FootnoteSchema.extend({
+  sentenceId: z.string(),
+});
+
+export type SentenceFootnote = z.infer<typeof SentenceFootnoteSchema>;
+
 export const SingleLanguageSentenceSchema = z.object({
   id: z.string(),
   text: z.string(),
+  footnotes: SentenceFootnoteSchema.array().optional(),
+  extraAttributes: z
+    .record(CamelCaseStringSchema, z.string().or(z.number()).or(z.boolean()))
+    .optional(),
 });
 
 export type SingleLanguageSentence = z.infer<
@@ -178,8 +200,12 @@ export const MultiLanguageSentenceSchema = z.object({
     .object({
       languageCode: z.enum(languageCategories.map((lC) => lC.code)),
       text: z.string(),
+      footnotes: SentenceFootnoteSchema.array().optional(),
     })
     .array(),
+  extraAttributes: z
+    .record(z.string().uppercase(), z.string().or(z.number()).or(z.boolean()))
+    .optional(),
 });
 
 export type MultiLanguageSentence = z.infer<typeof MultiLanguageSentenceSchema>;
@@ -198,19 +224,41 @@ export const PageSchema = z.object({
 });
 
 export type Page = z.infer<typeof PageSchema>;
+export type PageInput = z.input<typeof PageSchema>;
 
 export const ChapterTreeSchema = z.object({
-  file: z.object({
-    id: z.string(),
-    number: IdParamsSchema.shape.documentNumber,
-    meta: MetadataSchema.extend({
-      hasChapters: z.boolean().default(false),
-    }),
-    sect: z.object({
+  root: z.object({
+    file: z.object({
       id: z.string(),
-      name: z.string().default(''),
-      number: IdParamsSchema.shape.chapterNumber,
-      pages: PageSchema.array(),
+      number: IdParamsSchema.shape.documentNumber,
+      meta: MetadataSchema.extend({
+        hasChapters: z.boolean().default(false),
+      }),
+      sect: z.object({
+        id: z.string(),
+        name: z.string().default(''),
+        number: IdParamsSchema.shape.chapterNumber,
+        pages: PageSchema.omit({
+          sentences: true,
+        })
+          .extend({
+            sentences: SingleLanguageSentenceSchema.omit({
+              footnotes: true,
+            })
+              .or(
+                MultiLanguageSentenceSchema.extend({
+                  array: MultiLanguageSentenceSchema.shape.array.element
+                    .omit({
+                      footnotes: true,
+                    })
+                    .array(),
+                }),
+              )
+              .array(),
+          })
+          .array(),
+        footnotes: SentenceFootnoteSchema.array().optional(),
+      }),
     }),
   }),
 });

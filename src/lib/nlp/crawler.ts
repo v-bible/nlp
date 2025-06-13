@@ -1,5 +1,5 @@
 import path from 'path';
-import { type ZodError, z } from 'zod/v4';
+import { ZodError, z } from 'zod/v4';
 import { type WithCheckpointOptions, withCheckpoint } from '@/lib/checkpoint';
 import { readCsvFileStream, writeChapterContent } from '@/lib/nlp/fileUtils';
 import {
@@ -15,7 +15,8 @@ import {
   type MetadataRowCSV,
   MetadataRowCSVSchema,
   MetadataSchema,
-  type Page,
+  type PageInput,
+  PageSchema,
   mapMetadataRowCSVToMetadata,
 } from '@/lib/nlp/schema';
 import { logger } from '@/logger/logger';
@@ -24,6 +25,35 @@ export type CrawHref<T = Record<string, string>> = {
   href: string;
   props?: T;
 };
+
+export type GetChaptersFunctionHref = CrawHref<{
+  chapterNumber: number;
+  mdHref?: string;
+}>;
+
+export type GetChaptersFunction<
+  T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
+> = (params: {
+  resourceHref: CrawHref;
+  documentParams: DocumentParams;
+  metadata: Metadata;
+}) => Promise<Required<T>[]>;
+
+export type GetPageContentParams<
+  T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
+> = {
+  resourceHref: T;
+  chapterParams: ChapterParams;
+  metadata: Metadata;
+};
+
+export type GetPageContentFunction<
+  T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
+> = (params: GetPageContentParams<T>) => Promise<PageInput[]>;
+
+export type GetPageContentMdFunction<
+  T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
+> = (params: GetPageContentParams<T>) => Promise<string>;
 
 class Crawler {
   domainParams: Omit<GenreParams, 'genre'>;
@@ -36,29 +66,15 @@ class Crawler {
 
   checkpointFilePath: string;
 
-  outputXmlDir: string;
+  outputFileDir: string;
 
   metadataList: Metadata[] = [];
 
-  getChapters: (params: {
-    resourceHref: CrawHref;
-    documentParams: DocumentParams;
-    metadata: Metadata;
-  }) => Promise<
-    Required<
-      CrawHref<{
-        chapterNumber: number;
-      }>
-    >[]
-  >;
+  getChapters: GetChaptersFunction;
 
-  getPageContent: (params: {
-    resourceHref: CrawHref<{
-      chapterNumber: number;
-    }>;
-    chapterParams: ChapterParams;
-    metadata: Metadata;
-  }) => Promise<Page[]>;
+  getPageContent: GetPageContentFunction;
+
+  getPageContentMd?: GetPageContentMdFunction;
 
   generateTree: (
     params: GenerateTreeParams,
@@ -73,32 +89,18 @@ class Crawler {
     source,
     getChapters,
     getPageContent,
+    getPageContentMd,
     generateTree,
     sourceType = 'web',
     metadataFilePath,
     checkpointFilePath,
-    outputXmlDir,
+    outputFileDir,
     checkpointOptions,
   }: Omit<GenreParams, 'genre'> & {
     source: Metadata['source'];
-    getChapters: (params: {
-      resourceHref: CrawHref;
-      documentParams: DocumentParams;
-      metadata: Metadata;
-    }) => Promise<
-      Required<
-        CrawHref<{
-          chapterNumber: number;
-        }>
-      >[]
-    >;
-    getPageContent: (params: {
-      resourceHref: CrawHref<{
-        chapterNumber: number;
-      }>;
-      chapterParams: ChapterParams;
-      metadata: Metadata;
-    }) => Promise<Page[]>;
+    getChapters: GetChaptersFunction;
+    getPageContent: GetPageContentFunction;
+    getPageContentMd?: GetPageContentMdFunction;
     generateTree?: (
       params: GenerateTreeParams,
       options?: GenerateTreeOptions,
@@ -106,7 +108,7 @@ class Crawler {
     sourceType?: Metadata['sourceType'];
     metadataFilePath?: string;
     checkpointFilePath?: string;
-    outputXmlDir?: string;
+    outputFileDir?: string;
     checkpointOptions?: WithCheckpointOptions<Metadata>;
   }) {
     this.domainParams = {
@@ -117,6 +119,7 @@ class Crawler {
 
     this.getChapters = getChapters;
     this.getPageContent = getPageContent;
+    this.getPageContentMd = getPageContentMd;
 
     if (!generateTree) {
       generateTree = generateXML;
@@ -142,11 +145,11 @@ class Crawler {
 
     this.checkpointFilePath = checkpointFilePath;
 
-    if (!outputXmlDir) {
-      outputXmlDir = path.join(__dirname, '../../../dist/nlp-data');
+    if (!outputFileDir) {
+      outputFileDir = path.join(__dirname, '../../../dist/corpus');
     }
 
-    this.outputXmlDir = outputXmlDir;
+    this.outputFileDir = outputFileDir;
 
     this.checkpointOptions = checkpointOptions || {};
   }
@@ -251,7 +254,7 @@ class Crawler {
             `Error getting chapters for document ${metadata.documentId}:`,
             {
               href: metadata.sourceURL,
-              error: z.prettifyError(error as ZodError),
+              error: error instanceof ZodError ? z.prettifyError(error) : error,
             },
           );
 
@@ -274,25 +277,68 @@ class Crawler {
             metadata,
           });
 
+          const parsePageRes = PageSchema.array().safeParse(pageContent);
+
+          if (!parsePageRes.success) {
+            logger.error('Error parsing page content', {
+              error: z.prettifyError(parsePageRes.error),
+              href,
+              chapterParams,
+            });
+
+            // eslint-disable-next-line no-continue
+            continue;
+          }
+
           const tree = this.generateTree({
             idParams: chapterParams,
             metadata,
-            pages: pageContent,
+            pages: parsePageRes.data,
           });
 
           writeChapterContent({
             params: chapterParams,
-            baseDir: this.outputXmlDir,
+            baseDir: this.outputFileDir,
             content: tree,
             extension: 'xml',
             documentTitle: metadata.title,
           });
 
+          if (this.getPageContentMd) {
+            try {
+              const mdContent = await this.getPageContentMd({
+                resourceHref: { href, props },
+                chapterParams,
+                metadata,
+              });
+
+              writeChapterContent({
+                params: chapterParams,
+                baseDir: this.outputFileDir,
+                content: mdContent,
+                extension: 'md',
+                documentTitle: metadata.title,
+              });
+            } catch (error) {
+              logger.error(
+                `Error getting MD content for chapter ${props?.chapterNumber} of document ${metadata.documentId}:`,
+                {
+                  href,
+                  error:
+                    error instanceof ZodError ? z.prettifyError(error) : error,
+                },
+              );
+            }
+          }
+
           setCheckpointComplete(metadata.documentId, true);
         } catch (error) {
           logger.error(
             `Error processing chapter ${props?.chapterNumber} for document ${metadata.documentId}:`,
-            { href, error: z.prettifyError(error as ZodError) },
+            {
+              href,
+              error: error instanceof ZodError ? z.prettifyError(error) : error,
+            },
           );
         }
       }
