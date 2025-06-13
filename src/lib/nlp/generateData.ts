@@ -2,7 +2,6 @@ import { isValid, parse } from 'date-fns';
 import { u } from 'unist-builder';
 import { toXml } from 'xast-util-to-xml';
 import { type Child, x } from 'xastscript';
-import { z } from 'zod/v4';
 import { getChapterId, getDocumentId } from '@/lib/nlp/getId';
 import {
   type ChapterParams,
@@ -10,9 +9,13 @@ import {
   ChapterTreeSchema,
   IdParamsSchema,
   type MetadataInput,
+  type MetadataOutput,
   MetadataSchema,
-  type Page,
+  type PageInput,
+  type PageOutput,
   PageSchema,
+  type Sentence,
+  type TreeFootnote,
 } from '@/lib/nlp/schema';
 
 const newLineIndent = (level: number, indentationSize = 2) => {
@@ -52,31 +55,284 @@ export const defaultParseDate = (date: string): Date => {
 export type GenerateTreeParams = {
   idParams: ChapterParams;
   metadata: MetadataInput;
-  pages: Page[];
+  pages: PageInput[];
 };
 
 export type GenerateTreeOptions = {
+  type?: 'xml' | 'json';
   transformString?: (str: string) => string;
   parseDate?: (date: string) => Date;
 };
 
-const generateXML = (
+const generateXmlTree = (
+  chapterParams: ChapterParams,
+  metadata: MetadataOutput,
+  pages: PageOutput[],
+  footnotes: TreeFootnote[],
+  transformString: GenerateTreeOptions['transformString'] = defaultTransformString,
+) => {
+  const documentId = getDocumentId({
+    domain: chapterParams.domain,
+    subDomain: chapterParams.subDomain,
+    genre: chapterParams.genre,
+    documentNumber: chapterParams.documentNumber,
+  });
+  const chapterId = getChapterId({
+    domain: chapterParams.domain,
+    subDomain: chapterParams.subDomain,
+    genre: chapterParams.genre,
+    documentNumber: chapterParams.documentNumber,
+    chapterNumber: chapterParams.chapterNumber,
+  });
+
+  const xmlTree = x(
+    'root',
+    {},
+    ...generateIndent(1, [
+      x(
+        'FILE',
+        { ID: documentId, NUMBER: metadata.documentNumber },
+        ...generateIndent(2, [
+          x(
+            'meta',
+            {},
+            ...generateIndent(3, [
+              x('DOCUMENT_ID', documentId),
+              x('DOCUMENT_NUMBER', metadata.documentNumber),
+              x(
+                'GENRE',
+                {},
+                ...generateIndent(4, [
+                  x('CODE', metadata.genre.code),
+                  x('CATEGORY', metadata.genre.category),
+                  x('VIETNAMESE', metadata.genre.vietnamese),
+                ]),
+              ),
+              x(
+                'TAGS',
+                {},
+                ...generateIndent(4, [
+                  ...(metadata.tags?.map(({ category, vietnamese }) => {
+                    return x(
+                      'TAG',
+                      {},
+                      ...generateIndent(5, [
+                        x('CATEGORY', category),
+                        x('VIETNAMESE', vietnamese),
+                      ]),
+                    );
+                  }) || []),
+                ]),
+              ),
+              x('TITLE', metadata.title),
+              x('VOLUME', metadata.volume),
+              x('AUTHOR', metadata.author),
+              x('SOURCE_TYPE', metadata.sourceType),
+              x('SOURCE_URL', metadata.sourceURL),
+              x('SOURCE', metadata.source),
+              x('HAS_CHAPTERS', metadata.hasChapters ? 'true' : 'false'),
+              x('PERIOD', metadata.period),
+              x('PUBLISHED_TIME', metadata.publishedTime),
+              x('LANGUAGE', metadata.language),
+              x('NOTE', metadata.note),
+            ]),
+          ),
+
+          x(
+            'SECT',
+            {
+              ID: chapterId,
+              NAME: metadata.chapterName,
+              NUMBER: chapterParams.chapterNumber,
+            },
+            ...generateIndent(3, [
+              ...pages.map((page) => {
+                return x(
+                  'PAGE',
+                  {
+                    ID: page.id,
+                    NUMBER: page.number,
+                  },
+                  ...generateIndent(
+                    4,
+                    page.sentences.map((sentence) => {
+                      const extraAttributes = sentence?.extraAttributes;
+                      const newExtraAttributes: Record<string, string> = {};
+
+                      if (extraAttributes) {
+                        Object.entries(extraAttributes).forEach(
+                          ([key, value]) => {
+                            // NOTE: Convert camelCase to snake_case then to UPPERCASE
+                            const newKey = key
+                              .replace(/([a-z])([A-Z])/g, '$1_$2')
+                              .toUpperCase();
+
+                            newExtraAttributes[newKey] = String(value);
+                          },
+                        );
+                      }
+
+                      if (sentence.type === 'single') {
+                        return x(
+                          'STC',
+                          {
+                            ID: sentence.id,
+                            TYPE: sentence.type,
+                            ...newExtraAttributes,
+                          },
+                          transformString(sentence.text),
+                        );
+                      }
+
+                      return x(
+                        'STC',
+                        {
+                          ID: sentence.id,
+                          TYPE: sentence.type,
+                          ...newExtraAttributes,
+                        },
+                        ...generateIndent(
+                          5,
+                          sentence.array.map((lang) => {
+                            return x(
+                              lang.languageCode,
+                              {},
+                              transformString(lang.text),
+                            );
+                          }),
+                        ),
+                      );
+                    }),
+                  ),
+                );
+              }),
+
+              x(
+                'FOOTNOTES',
+                {},
+                ...generateIndent(
+                  4,
+                  footnotes.map((footnote) => {
+                    return x(
+                      'FOOTNOTE',
+                      {
+                        SENTENCE_ID: footnote.sentenceId,
+                        LABEL: footnote.label,
+                        POSITION: footnote.position,
+                      },
+                      footnote.text,
+                    );
+                  }),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    ]),
+  );
+
+  // Convert the tree to XML string
+  return toXml(xmlTree).trim();
+};
+
+const generateJsonTree = (
+  chapterParams: ChapterParams,
+  metadata: MetadataOutput,
+  pages: PageOutput[],
+  footnotes: TreeFootnote[],
+  transformString: GenerateTreeOptions['transformString'] = defaultTransformString,
+) => {
+  const documentId = getDocumentId({
+    domain: chapterParams.domain,
+    subDomain: chapterParams.subDomain,
+    genre: chapterParams.genre,
+    documentNumber: chapterParams.documentNumber,
+  });
+  const chapterId = getChapterId({
+    domain: chapterParams.domain,
+    subDomain: chapterParams.subDomain,
+    genre: chapterParams.genre,
+    documentNumber: chapterParams.documentNumber,
+    chapterNumber: chapterParams.chapterNumber,
+  });
+
+  const jsonTree = {
+    root: {
+      file: {
+        id: documentId,
+        number: metadata.documentNumber,
+        meta: {
+          ...metadata,
+          documentId,
+          genre: {
+            code: metadata.genre.code,
+            category: metadata.genre.category,
+            vietnamese: metadata.genre.vietnamese,
+          },
+        },
+
+        sect: {
+          id: chapterId,
+          name: metadata.chapterName,
+          number: chapterParams.chapterNumber,
+          pages: pages.map((page) => {
+            return {
+              id: page.id,
+              number: page.number,
+              sentences: page.sentences.map((sentence) => {
+                if (sentence.type === 'single') {
+                  return {
+                    id: sentence.id,
+                    type: sentence.type,
+                    extraAttributes: sentence.extraAttributes,
+                    text: transformString(sentence.text),
+                  };
+                }
+
+                return {
+                  id: sentence.id,
+                  type: sentence.type,
+                  extraAttributes: sentence.extraAttributes,
+                  array: sentence.array.map((lang) => {
+                    return {
+                      languageCode: lang.languageCode,
+                      text: transformString(lang.text),
+                    };
+                  }),
+                };
+              }) satisfies Sentence[],
+            };
+          }),
+          footnotes,
+        },
+      },
+    },
+  } satisfies ChapterTree;
+
+  // NOTE: Validate the JSON structure
+  ChapterTreeSchema.parse(jsonTree);
+
+  return JSON.stringify(jsonTree, null, 2);
+};
+
+const generateDataTree = (
   { idParams, metadata, pages }: GenerateTreeParams,
   options?: GenerateTreeOptions,
 ): string => {
   const {
+    type = 'xml',
     transformString = defaultTransformString,
     parseDate = defaultParseDate,
   } = options || {};
 
   // ✅ Validate input
-  const { domain, subDomain, genre, documentNumber, chapterNumber } =
-    IdParamsSchema.omit({
-      pageNumber: true,
-      sentenceNumber: true,
-    }).parse(idParams);
+  const chapterParams = IdParamsSchema.omit({
+    pageNumber: true,
+    sentenceNumber: true,
+  }).parse(idParams);
 
-  const parseMetadata = MetadataSchema.extend({
+  const parsedMetadata = MetadataSchema.extend({
     publishedTime: MetadataSchema.shape.publishedTime.refine(
       (date) => {
         if (date === '') {
@@ -96,240 +352,46 @@ const generateXML = (
     ),
   }).parse(metadata);
 
-  const parsePages = PageSchema.array().parse(pages);
+  const parsedPages = PageSchema.array().parse(pages);
 
-  const documentId = getDocumentId({
-    domain,
-    subDomain,
-    genre,
-    documentNumber,
-  });
-  const chapterId = getChapterId({
-    domain,
-    subDomain,
-    genre,
-    documentNumber,
-    chapterNumber,
-  });
-
-  const xmlTree = u('root', [
-    newLineIndent(0),
-    x(
-      'FILE',
-      { ID: documentId, NUMBER: parseMetadata.documentNumber },
-      ...generateIndent(1, [
-        x(
-          'meta',
-          {},
-          ...generateIndent(2, [
-            x('DOCUMENT_ID', documentId),
-            x('DOCUMENT_NUMBER', parseMetadata.documentNumber),
-            x(
-              'GENRE',
-              {},
-              ...generateIndent(3, [
-                x('CODE', parseMetadata.genre.code),
-                x('CATEGORY', parseMetadata.genre.category),
-                x('VIETNAMESE', parseMetadata.genre.vietnamese),
-              ]),
-            ),
-            x(
-              'TAGS',
-              {},
-              ...generateIndent(3, [
-                ...(parseMetadata.tags?.map(({ category, vietnamese }) => {
-                  return x(
-                    'TAG',
-                    {},
-                    ...generateIndent(4, [
-                      x('CATEGORY', category),
-                      x('VIETNAMESE', vietnamese),
-                    ]),
-                  );
-                }) || []),
-              ]),
-            ),
-            x('TITLE', parseMetadata.title),
-            x('VOLUME', parseMetadata.volume),
-            x('AUTHOR', parseMetadata.author),
-            x('SOURCE_TYPE', parseMetadata.sourceType),
-            x('SOURCE_URL', parseMetadata.sourceURL),
-            x('SOURCE', parseMetadata.source),
-            x('HAS_CHAPTERS', parseMetadata.hasChapters ? 'true' : 'false'),
-            x('PERIOD', parseMetadata.period),
-            x('PUBLISHED_TIME', parseMetadata.publishedTime),
-            x('LANGUAGE', parseMetadata.language),
-            x('NOTE', parseMetadata.note),
-          ]),
-        ),
-
-        x(
-          'SECT',
-          {
-            ID: chapterId,
-            NAME: parseMetadata.chapterName,
-            NUMBER: chapterNumber,
-          },
-          ...generateIndent(
-            2,
-            parsePages.map((page) => {
-              return x(
-                'PAGE',
-                { ID: page.id, NUMBER: page.number },
-                ...generateIndent(
-                  3,
-                  page.sentences.map((sentence) => {
-                    if ('text' in sentence) {
-                      return x(
-                        'STC',
-                        {
-                          ID: sentence.id,
-                        },
-                        transformString(sentence.text),
-                      );
-                    }
-
-                    return x(
-                      'STC',
-                      {
-                        ID: sentence.id,
-                      },
-                      ...generateIndent(
-                        4,
-                        sentence.array.map((lang) => {
-                          return x(
-                            lang.languageCode,
-                            {},
-                            transformString(lang.text),
-                          );
-                        }),
-                      ),
-                    );
-                  }),
-                ),
-              );
-            }),
-          ),
-        ),
-      ]),
-    ),
-  ]);
-
-  // Convert the tree to XML string
-  return toXml(xmlTree).trim();
-};
-
-const generateJson = (
-  { idParams, metadata, pages }: GenerateTreeParams,
-  options?: GenerateTreeOptions,
-): string => {
-  const {
-    transformString = defaultTransformString,
-    parseDate = defaultParseDate,
-  } = options || {};
-
-  // ✅ Validate input
-  const { domain, subDomain, genre, documentNumber, chapterNumber } =
-    IdParamsSchema.omit({
-      pageNumber: true,
-      sentenceNumber: true,
-    }).parse(idParams);
-
-  const parseMetadata = MetadataSchema.extend({
-    publishedTime: z.string().refine(
-      (date) => {
-        try {
-          parseDate(date);
-          return true;
-        } catch {
-          return false;
+  const treeFootnotes = parsedPages
+    .flatMap((page) => {
+      return page.sentences.flatMap((sentence) => {
+        if (sentence.type === 'single') {
+          return sentence?.footnotes || [];
         }
-      },
-      {
-        message: 'Invalid date format',
-      },
-    ),
-  }).parse(metadata);
 
-  const parsePages = PageSchema.array().parse(pages);
+        return sentence.array.flatMap((lang) => lang?.footnotes || []);
+      });
+    })
+    .map((fn, idx) => ({
+      ...fn,
+      order: idx,
+    })) satisfies TreeFootnote[];
 
-  const documentId = getDocumentId({
-    domain,
-    subDomain,
-    genre,
-    documentNumber,
-  });
-  const chapterId = getChapterId({
-    domain,
-    subDomain,
-    genre,
-    documentNumber,
-    chapterNumber,
-  });
+  if (type === 'xml') {
+    return generateXmlTree(
+      chapterParams,
+      parsedMetadata,
+      parsedPages,
+      treeFootnotes,
+      transformString,
+    );
+  }
 
-  const jsonTree = {
-    file: {
-      id: documentId,
-      number: parseMetadata.documentNumber,
-      meta: {
-        documentId,
-        documentNumber: parseMetadata.documentNumber,
-        genre: {
-          code: parseMetadata.genre.code,
-          category: parseMetadata.genre.category,
-          vietnamese: parseMetadata.genre.vietnamese,
-        },
-        tags: parseMetadata.tags,
-        title: parseMetadata.title,
-        volume: parseMetadata.volume,
-        author: parseMetadata.author,
-        sourceType: parseMetadata.sourceType,
-        sourceURL: parseMetadata.sourceURL,
-        source: parseMetadata.source,
-        chapterName: parseMetadata.chapterName,
-        hasChapters: parseMetadata.hasChapters,
-        period: parseMetadata.period,
-        publishedTime: parseMetadata.publishedTime,
-        language: parseMetadata.language,
-        note: parseMetadata.note,
-      },
-
-      sect: {
-        id: chapterId,
-        name: parseMetadata.chapterName,
-        number: chapterNumber,
-        pages: parsePages.map((page) => {
-          return {
-            id: page.id,
-            number: page.number,
-            sentences: page.sentences.map((sentence) => {
-              if ('text' in sentence) {
-                return {
-                  id: sentence.id,
-                  text: transformString(sentence.text),
-                };
-              }
-
-              return {
-                id: sentence.id,
-                array: sentence.array.map((lang) => {
-                  return {
-                    languageCode: lang.languageCode,
-                    text: transformString(lang.text),
-                  };
-                }),
-              };
-            }),
-          };
-        }),
-      },
-    },
-  } satisfies ChapterTree;
-
-  // NOTE: Validate the JSON structure
-  ChapterTreeSchema.parse(jsonTree);
-
-  return JSON.stringify(jsonTree, null, 2);
+  return generateJsonTree(
+    chapterParams,
+    parsedMetadata,
+    parsedPages,
+    treeFootnotes,
+    transformString,
+  );
 };
 
-export { newLineIndent, generateIndent, generateXML, generateJson };
+export {
+  newLineIndent,
+  generateIndent,
+  generateDataTree,
+  generateXmlTree,
+  generateJsonTree,
+};
