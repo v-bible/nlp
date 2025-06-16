@@ -177,17 +177,21 @@ pnpm install
 
 > [!NOTE]
 > Data is stored on Huggingface dataset:
-> [nlp-data](https://huggingface.co/datasets/duckymomo20012/nlp-data).
+> [catholic-resources](https://huggingface.co/datasets/v-bible/catholic-resources).
+
+> [!NOTE]
+> Data is stored as folder of `<genre>`s instead of
+> `corpus/<domain>/<subDomain>/<genre>`, because this repository is only stored
+> for the **Catholic resources** (`RC`).
 
 ```
-nlp-data
-└── data
-    └── <domain>
-        └── <subDomain>
-            └── <genre>
-                └── <domain><subDomain><genre>_fff (<documentTitle>)
-                    └── <domain><subDomain><genre>_fff.ccc.xml
-                        └── ...
+catholic-resources
+└── corpus
+    └── <genre>
+        └── <domain><subDomain><genre>_fff (<documentTitle>)
+            ├── <domain><subDomain><genre>_fff.ccc.xml
+            ├── <domain><subDomain><genre>_fff.ccc.md
+            └── ...
 ```
 
 - `documentTitle`: The title of the document, which is used to identify the
