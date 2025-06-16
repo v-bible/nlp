@@ -1,6 +1,10 @@
 import path from 'path';
 import { ZodError, z } from 'zod/v4';
-import { type WithCheckpointOptions, withCheckpoint } from '@/lib/checkpoint';
+import {
+  type Checkpoint,
+  type WithCheckpointOptions,
+  withCheckpoint,
+} from '@/lib/checkpoint';
 import { readCsvFileStream, writeChapterContent } from '@/lib/nlp/fileUtils';
 import {
   type GenerateTreeOptions,
@@ -28,8 +32,14 @@ export type CrawHref<T = Record<string, string>> = {
 
 export type GetChaptersFunctionHref = CrawHref<{
   chapterNumber: number;
+  chapterName?: string;
   mdHref?: string;
 }>;
+
+export type GetMetadataByFunction = (metadata: MetadataRowCSV) => boolean;
+export type FilterCheckpointFunction = (
+  checkpoint: Checkpoint<Metadata>,
+) => boolean;
 
 export type GetChaptersFunction<
   T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
@@ -64,11 +74,9 @@ export type GenerateMultipleTreesFunction = {
 }[];
 
 class Crawler {
+  name: string;
+
   domainParams: Omit<GenreParams, 'genre'>;
-
-  source: Metadata['source'];
-
-  sourceType: Metadata['sourceType'];
 
   metadataFilePath: string;
 
@@ -77,6 +85,10 @@ class Crawler {
   outputFileDir: string;
 
   metadataList: Metadata[] = [];
+
+  getMetadataBy: GetMetadataByFunction;
+
+  filterCheckpoint?: FilterCheckpointFunction;
 
   getChapters: GetChaptersFunction;
 
@@ -91,36 +103,40 @@ class Crawler {
   checkpointOptions: WithCheckpointOptions<Metadata>;
 
   constructor({
+    name,
     domain,
     subDomain,
-    source,
+    getMetadataBy,
+    filterCheckpoint,
     getChapters,
     getPageContent,
     getPageContentMd,
     generateMultipleTrees,
-    sourceType = 'web',
     metadataFilePath,
     checkpointFilePath,
     outputFileDir,
     checkpointOptions,
   }: Omit<GenreParams, 'genre'> & {
-    source: Metadata['source'];
+    name: string;
+    getMetadataBy: GetMetadataByFunction;
+    filterCheckpoint?: FilterCheckpointFunction;
     getChapters: GetChaptersFunction;
     getPageContent: GetPageContentFunction;
     getPageContentMd?: GetPageContentMdFunction;
     generateMultipleTrees?: GenerateMultipleTreesFunction;
-    sourceType?: Metadata['sourceType'];
     metadataFilePath?: string;
     checkpointFilePath?: string;
     outputFileDir?: string;
     checkpointOptions?: WithCheckpointOptions<Metadata>;
   }) {
+    this.name = name;
     this.domainParams = {
       domain,
       subDomain,
     };
-    this.source = source;
 
+    this.getMetadataBy = getMetadataBy;
+    this.filterCheckpoint = filterCheckpoint;
     this.getChapters = getChapters;
     this.getPageContent = getPageContent;
     this.getPageContentMd = getPageContentMd;
@@ -146,8 +162,6 @@ class Crawler {
 
     this.generateMultipleTrees = generateMultipleTrees;
 
-    this.sourceType = sourceType;
-
     if (!metadataFilePath) {
       metadataFilePath = path.join(__dirname, '../../../data', 'main.tsv');
     }
@@ -158,7 +172,7 @@ class Crawler {
       checkpointFilePath = path.join(
         __dirname,
         '../../../dist',
-        `${domain}${subDomain}-${source}-checkpoint.json`,
+        `${domain}${subDomain}-${name}-checkpoint.json`,
       );
     }
 
@@ -186,6 +200,7 @@ class Crawler {
 
         if (!parseRes.success) {
           logger.error('Error parsing row:', {
+            row,
             error: z.prettifyError(parseRes.error),
           });
           return;
@@ -193,10 +208,7 @@ class Crawler {
 
         const metadataRow = parseRes.data;
 
-        if (
-          metadataRow.source === this.source &&
-          metadataRow.sourceType === this.sourceType
-        ) {
+        if (this.getMetadataBy(metadataRow)) {
           metadataRowList.push(metadataRow);
         }
       });
@@ -223,6 +235,11 @@ class Crawler {
         // correct `this` context
         getInitialData: this.getMetadataList.bind(this),
         getCheckpointId: (data) => data.documentId,
+        filterCheckpoint: (checkpoint) => {
+          return this.filterCheckpoint
+            ? this.filterCheckpoint(checkpoint)
+            : !checkpoint.completed;
+        },
         filePath: this.checkpointFilePath,
         options: this.checkpointOptions,
       });
@@ -233,6 +250,7 @@ class Crawler {
 
       if (!parseRes.success) {
         logger.error('Error parsing metadata checkpoint', {
+          id: checkpoint.id,
           error: z.prettifyError(parseRes.error),
         });
 
@@ -248,11 +266,7 @@ class Crawler {
         documentNumber: +metadata.documentNumber,
       };
 
-      let chapterCrawlList: Required<
-        CrawHref<{
-          chapterNumber: number;
-        }>
-      >[] = [
+      let chapterCrawlList: Awaited<ReturnType<GetChaptersFunction>> = [
         {
           href: metadata.sourceURL,
           props: {
@@ -287,6 +301,7 @@ class Crawler {
         const chapterParams = {
           ...documentParams,
           chapterNumber: props?.chapterNumber,
+          chapterName: props?.chapterName,
         };
 
         try {
@@ -313,7 +328,7 @@ class Crawler {
           for (const { extension, generateTree } of this
             .generateMultipleTrees) {
             const tree = generateTree({
-              idParams: chapterParams,
+              chapterParams,
               metadata,
               pages: parsePageRes.data,
             });

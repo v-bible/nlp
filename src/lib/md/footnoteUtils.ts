@@ -1,5 +1,9 @@
 import { type Footnote } from '@/lib/nlp/schema';
 
+// NOTE: Footnote label can be any alphanumeric string wrapped in square
+// brackets. E.g. [1], [note], \\[1] etc.
+export const reFootnote = /\\?\\?\[(?<label>[a-zA-Z0-9*]+)\]/gm;
+
 const defaultFormatFootnoteLabel = (label: string) => {
   // NOTE: Default format is to wrap the label in square brackets
   return `[${label}]`;
@@ -34,10 +38,6 @@ const injectFootnote = <
   return str;
 };
 
-// NOTE: Footnote label can be any alphanumeric string wrapped in square
-// brackets. E.g. [1], [note], etc.
-const defaultFootnoteRegex = /\[(?<label>[a-zA-Z0-9]+)\]/gm;
-
 const defaultFootnoteLabelSelector = (match: RegExpExecArray) => {
   // NOTE: Default label selector is to return the named group 'label'
   return match.groups?.label ?? match[0];
@@ -45,7 +45,7 @@ const defaultFootnoteLabelSelector = (match: RegExpExecArray) => {
 
 const extractFootnote = (
   text: string,
-  labelRegex: RegExp = defaultFootnoteRegex,
+  labelRegex: RegExp = reFootnote,
   labelSelector: (
     match: RegExpExecArray,
   ) => string = defaultFootnoteLabelSelector,
@@ -77,10 +77,7 @@ const extractFootnote = (
   });
 };
 
-const removeAllFootnote = (
-  text: string,
-  labelRegex: RegExp = defaultFootnoteRegex,
-) => {
+const removeAllFootnote = (text: string, labelRegex: RegExp = reFootnote) => {
   return text.replaceAll(labelRegex, '');
 };
 
@@ -89,6 +86,5 @@ export {
   extractFootnote,
   removeAllFootnote,
   defaultFormatFootnoteLabel,
-  defaultFootnoteRegex,
   defaultFootnoteLabelSelector,
 };
