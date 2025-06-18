@@ -44,10 +44,14 @@ export type DocumentParams = Pick<
   'domain' | 'subDomain' | 'genre' | 'documentNumber'
 >;
 
-export type ChapterParams = Pick<
-  IdParams,
-  'domain' | 'subDomain' | 'genre' | 'documentNumber' | 'chapterNumber'
->;
+export const ChapterParamsSchema = IdParamsSchema.omit({
+  pageNumber: true,
+  sentenceNumber: true,
+}).extend({
+  chapterName: z.string().optional().default(''),
+});
+
+export type ChapterParams = z.infer<typeof ChapterParamsSchema>;
 
 export type PageParams = Pick<
   IdParams,
@@ -106,6 +110,11 @@ export const MetadataSchema = z.object({
     })
     .refine(
       (val) => {
+        // NOTE: Tags can be empty, in which case we don't validate
+        if (val.category === '') {
+          return true;
+        }
+
         // NOTE: Check if vietnamese is translated from category
         const category = tagCategories.find(
           (gC) => gC.category === val.category,
@@ -119,17 +128,16 @@ export const MetadataSchema = z.object({
     )
     .array(),
   title: z.string(),
-  volume: z.string().default(''),
-  author: z.string().default(''),
+  volume: z.string().optional().default(''),
+  author: z.string().optional().default(''),
   sourceType: z.enum(['web', 'pdf', 'hardCopy']),
-  sourceURL: z.url().or(z.literal('')).default(''),
-  source: z.string().default(''),
-  chapterName: z.string().optional().default(''),
-  hasChapters: z.boolean().default(false),
-  period: z.string().default(''),
-  publishedTime: z.string().default(''),
+  sourceURL: z.url().or(z.literal('')).optional().default(''),
+  source: z.string().optional().default(''),
+  hasChapters: z.boolean().optional().default(false),
+  period: z.string().optional().default(''),
+  publishedTime: z.string().optional().default(''),
   language: z.enum(languageCategories.map((lC) => lC.vietnamese)),
-  note: z.string().default(''),
+  note: z.string().optional().default(''),
 });
 
 export type Metadata = z.infer<typeof MetadataSchema>;
@@ -188,11 +196,26 @@ export const TreeFootnoteSchema = SentenceFootnoteSchema.extend({
 
 export type TreeFootnote = z.infer<typeof TreeFootnoteSchema>;
 
+export const HeadingSchema = z.object({
+  text: z.string(),
+  level: z.number().gte(1).lte(6),
+  order: z.number().gte(0),
+});
+
+export type Heading = z.infer<typeof HeadingSchema>;
+
+export const SentenceHeadingSchema = HeadingSchema.extend({
+  sentenceId: z.string(),
+});
+
+export type SentenceHeading = z.infer<typeof SentenceHeadingSchema>;
+
 export const SingleLanguageSentenceSchema = z.object({
   id: z.string(),
   type: z.enum(['single']),
   text: z.string(),
   footnotes: SentenceFootnoteSchema.array().optional(),
+  headings: SentenceHeadingSchema.array().optional(),
   extraAttributes: z
     .record(CamelCaseStringSchema, z.string().or(z.number()).or(z.boolean()))
     .optional(),
@@ -205,6 +228,7 @@ export type SingleLanguageSentence = z.infer<
 export const MultiLanguageSentenceSchema = z.object({
   id: z.string(),
   type: z.enum(['multiple']),
+  headings: SentenceHeadingSchema.array().optional(),
   array: z
     .object({
       languageCode: z.enum(languageCategories.map((lC) => lC.code)),
@@ -246,7 +270,7 @@ export const ChapterTreeSchema = z.object({
       }),
       sect: z.object({
         id: z.string(),
-        name: z.string().default(''),
+        name: z.string().optional().default(''),
         number: IdParamsSchema.shape.chapterNumber,
         pages: PageSchema.omit({
           sentences: true,
@@ -268,6 +292,7 @@ export const ChapterTreeSchema = z.object({
           })
           .array(),
         footnotes: TreeFootnoteSchema.array().optional(),
+        headings: SentenceHeadingSchema.array().optional(),
       }),
     }),
   }),

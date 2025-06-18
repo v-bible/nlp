@@ -1,0 +1,100 @@
+/* eslint-disable no-restricted-syntax */
+/* eslint-disable no-continue */
+import retry from 'async-retry';
+import { chromium, devices } from 'playwright';
+import {
+  cleanupMdProcessor,
+  normalizeAsterisk,
+  normalizeWhitespace,
+  removeBulletEscape,
+  removeMdHr,
+  removeMdImgs,
+  removeMdLinks,
+} from '@/lib/md/mdUtils';
+import { parseMd } from '@/lib/md/remark';
+import { type GetPageContentMdFunction } from '@/lib/nlp/crawler';
+
+const getPageContentMd = (async ({ resourceHref }) => {
+  const { href } = resourceHref;
+
+  const browser = await chromium.launch();
+  const context = await browser.newContext(devices['Desktop Chrome']);
+  const page = await context.newPage();
+
+  await retry(
+    async () => {
+      await page.goto(href);
+    },
+    {
+      retries: 5,
+    },
+  );
+
+  await page.evaluate(() => {
+    // NOTE: Remove table element although remark-gfm still can parse it
+    document.querySelectorAll('table').forEach((el) => el.remove());
+  });
+
+  const bodyLocator = page.locator(
+    'div[class="detail-article main-content" i] > div',
+  );
+
+  await bodyLocator.evaluate((node) => {
+    const allLinkEl = node.querySelectorAll('a');
+
+    for (const linkEl of allLinkEl) {
+      const fnName = linkEl.getAttribute('name');
+
+      if (!fnName) {
+        continue;
+      }
+
+      if (
+        (fnName.includes('_ftn') || fnName.includes('_edn')) &&
+        !fnName.includes('ref')
+      ) {
+        // NOTE: We have to add a colon to the end of the footnote label so it
+        // will confront with github-flavored markdown
+        linkEl.innerHTML = `[${linkEl.textContent?.replace('[', '').replace(']', '')}:]`;
+      }
+    }
+  });
+
+  const bodyHtml = await bodyLocator.innerHTML();
+
+  await context.close();
+  await browser.close();
+
+  const md = await parseMd(bodyHtml);
+
+  const fnRegex =
+    /\[[^\\[]*(\\\[)?(?<label>[^\\]*)(\\\])?[^\\\]]*\]\(([^)]*)\)/gm;
+
+  const cleanupMd = cleanupMdProcessor(md, [
+    removeMdImgs,
+    (str) =>
+      removeMdLinks(str, {
+        useLinkAsAlt: false,
+      }),
+    removeMdHr,
+    (str) => {
+      return str.replaceAll(fnRegex, (subStr, ...props) => {
+        // NOTE: Label is the second capturing group
+        const label = props[1];
+        // NOTE: The colon we injected above will be included in the label
+        if (label.includes(':')) {
+          return `[^${label.replace(':', '')}]:`;
+        }
+        return `[^${label}]`;
+      });
+    },
+    removeBulletEscape,
+    // NOTE: Have to run first so the asterisk regex can match correctly
+    normalizeWhitespace,
+    normalizeAsterisk,
+  ]);
+
+  return cleanupMd;
+}) satisfies GetPageContentMdFunction;
+
+export { getPageContentMd };

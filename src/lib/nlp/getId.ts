@@ -35,7 +35,12 @@ const getDocumentId = (params: DocumentParams) => {
 };
 
 // NOTE: Document chapter ID format: DSG_fff.ccc
-const getChapterId = (params: ChapterParams) => {
+const getChapterId = (
+  params: Pick<
+    ChapterParams,
+    'domain' | 'subDomain' | 'genre' | 'documentNumber' | 'chapterNumber'
+  >,
+) => {
   IdParamsSchema.omit({
     pageNumber: true,
     sentenceNumber: true,

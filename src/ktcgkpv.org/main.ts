@@ -1,16 +1,17 @@
 import { readFileSync } from 'fs';
 import path from 'path';
+import sentencize from '@stdlib/nlp-sentencize';
 import { groupBy } from 'es-toolkit';
-import natural from 'natural';
 import {
   extractFootnote,
   injectFootnote,
   removeAllFootnote,
-} from '@/lib/footnoteUtils';
+} from '@/lib/md/footnoteUtils';
 import { Crawler, type GetChaptersFunction } from '@/lib/nlp/crawler';
 import { getPageId, getSentenceId } from '@/lib/nlp/getId';
 import {
   type Footnote,
+  type Heading,
   type PageInput,
   type SingleLanguageSentence,
 } from '@/lib/nlp/schema';
@@ -22,9 +23,14 @@ const main = async () => {
   ) as Record<string, unknown>[];
 
   const crawler = new Crawler({
+    name: 'ktcgkpv.org',
     domain: 'R',
     subDomain: 'C',
-    source: 'ktcgkpv.org',
+    getMetadataBy: (metadataRow) => {
+      return (
+        metadataRow.source === 'ktcgkpv.org' && metadataRow.sourceType === 'web'
+      );
+    },
     getChapters: async ({ resourceHref }) => {
       const bookCode = resourceHref.href.split('/').pop();
 
@@ -53,6 +59,7 @@ const main = async () => {
         verses,
         footnotes = [],
         references = [],
+        headings = [],
       } = await (await fetch(resourceHref.href)).json();
 
       const groupByParagraph = groupBy(
@@ -73,6 +80,19 @@ const main = async () => {
           sentences:
             groupByParagraph[key]
               ?.flatMap((verse) => {
+                const verseHeadings = headings
+                  .filter(
+                    (heading: Record<string, unknown>) =>
+                      heading.verseId === verse.id,
+                  )
+                  .map((heading: Record<string, unknown>) => {
+                    return {
+                      text: heading.content as string,
+                      level: heading.level as number,
+                      order: heading.order as number,
+                    };
+                  }) as Heading[];
+
                 // NOTE: The problem is verse footnotes and refs are calculated
                 // for a verse, which may contains multiple sentences. However,
                 // in the next steps, we will split into multiple sentences, we
@@ -110,13 +130,11 @@ const main = async () => {
                   [...verseFootnotes, ...verseRefs],
                 );
 
-                const tokenizer = new natural.SentenceTokenizer([]);
-
                 // NOTE: Since some verses might have multiple sentences, we have
                 // to use tokenizer to split them into sentences.
-                const sentences = tokenizer.tokenize(verseWithFootnotesAndRefs);
+                const sentences = sentencize(verseWithFootnotesAndRefs);
 
-                return sentences.map((sentence) => {
+                return sentences.map((sentence, idx) => {
                   // First, we extract footnotes and references from the split
                   // sentence.
                   const sentenceFootnotes = extractFootnote(
@@ -140,15 +158,16 @@ const main = async () => {
                     }
 
                     if (!verseFootnote) {
-                      logger.warn(
-                        `Footnote or reference not found for label: ${fn.label}`,
-                      );
+                      logger.warn('Footnote text not found for label', {
+                        href: resourceHref.href,
+                        label: fn.label,
+                      });
                       return [];
                     }
 
                     return [
                       {
-                        text: verseFootnote.text as string,
+                        text: removeAllFootnote(verseFootnote.text as string),
                         label: fn.label,
                         position: fn.position,
                       } satisfies Footnote,
@@ -158,6 +177,8 @@ const main = async () => {
                   return {
                     type: 'single',
                     text: removeAllFootnote(sentence) as string,
+                    // NOTE: Headings always belong to the first sentence
+                    headings: idx === 0 ? verseHeadings : [],
                     footnotes: sentenceFootnotes,
                     extraAttributes: {
                       verseNumber: verse.number as number,
@@ -169,9 +190,10 @@ const main = async () => {
                     },
                   } satisfies Omit<
                     SingleLanguageSentence,
-                    'id' | 'footnotes'
+                    'id' | 'footnotes' | 'headings'
                   > & {
                     footnotes: Footnote[];
+                    headings: Heading[];
                   };
                 });
               })
@@ -187,6 +209,10 @@ const main = async () => {
                   footnotes: sentence.footnotes.map((fn, idx) => ({
                     ...fn,
                     order: idx,
+                    sentenceId: newSentenceId,
+                  })),
+                  headings: sentence.headings.map((heading) => ({
+                    ...heading,
                     sentenceId: newSentenceId,
                   })),
                 } satisfies SingleLanguageSentence;

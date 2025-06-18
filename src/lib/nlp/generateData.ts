@@ -5,9 +5,9 @@ import { type Child, x } from 'xastscript';
 import { getChapterId, getDocumentId } from '@/lib/nlp/getId';
 import {
   type ChapterParams,
+  ChapterParamsSchema,
   type ChapterTree,
   ChapterTreeSchema,
-  IdParamsSchema,
   type MetadataInput,
   type MetadataOutput,
   MetadataSchema,
@@ -15,6 +15,7 @@ import {
   type PageOutput,
   PageSchema,
   type Sentence,
+  type SentenceHeading,
   type TreeFootnote,
 } from '@/lib/nlp/schema';
 
@@ -53,7 +54,7 @@ export const defaultParseDate = (date: string): Date => {
 };
 
 export type GenerateTreeParams = {
-  idParams: ChapterParams;
+  chapterParams: ChapterParams;
   metadata: MetadataInput;
   pages: PageInput[];
 };
@@ -69,6 +70,7 @@ const generateXmlTree = (
   metadata: MetadataOutput,
   pages: PageOutput[],
   footnotes: TreeFootnote[],
+  headings: SentenceHeading[],
   transformString: GenerateTreeOptions['transformString'] = defaultTransformString,
 ) => {
   const documentId = getDocumentId({
@@ -142,7 +144,7 @@ const generateXmlTree = (
             'SECT',
             {
               ID: chapterId,
-              NAME: metadata.chapterName,
+              NAME: chapterParams.chapterName,
               NUMBER: chapterParams.chapterNumber,
             },
             ...generateIndent(3, [
@@ -219,8 +221,28 @@ const generateXmlTree = (
                         SENTENCE_ID: footnote.sentenceId,
                         LABEL: footnote.label,
                         POSITION: footnote.position,
+                        ORDER: footnote.order,
                       },
                       footnote.text,
+                    );
+                  }),
+                ),
+              ),
+
+              x(
+                'HEADINGS',
+                {},
+                ...generateIndent(
+                  4,
+                  headings.map((heading) => {
+                    return x(
+                      'HEADING',
+                      {
+                        SENTENCE_ID: heading.sentenceId,
+                        LEVEL: heading.level,
+                        ORDER: heading.order,
+                      },
+                      heading.text,
                     );
                   }),
                 ),
@@ -241,6 +263,7 @@ const generateJsonTree = (
   metadata: MetadataOutput,
   pages: PageOutput[],
   footnotes: TreeFootnote[],
+  headings: SentenceHeading[],
   transformString: GenerateTreeOptions['transformString'] = defaultTransformString,
 ) => {
   const documentId = getDocumentId({
@@ -274,7 +297,7 @@ const generateJsonTree = (
 
         sect: {
           id: chapterId,
-          name: metadata.chapterName,
+          name: chapterParams.chapterName,
           number: chapterParams.chapterNumber,
           pages: pages.map((page) => {
             return {
@@ -305,6 +328,7 @@ const generateJsonTree = (
             };
           }),
           footnotes,
+          headings,
         },
       },
     },
@@ -317,7 +341,7 @@ const generateJsonTree = (
 };
 
 const generateDataTree = (
-  { idParams, metadata, pages }: GenerateTreeParams,
+  { chapterParams, metadata, pages }: GenerateTreeParams,
   options?: GenerateTreeOptions,
 ): string => {
   const {
@@ -327,10 +351,7 @@ const generateDataTree = (
   } = options || {};
 
   // ✅ Validate input
-  const chapterParams = IdParamsSchema.omit({
-    pageNumber: true,
-    sentenceNumber: true,
-  }).parse(idParams);
+  const parsedChapterParams = ChapterParamsSchema.parse(chapterParams);
 
   const parsedMetadata = MetadataSchema.extend({
     publishedTime: MetadataSchema.shape.publishedTime.refine(
@@ -369,21 +390,29 @@ const generateDataTree = (
       order: idx,
     })) satisfies TreeFootnote[];
 
+  const treeHeadings = parsedPages.flatMap((page) => {
+    return page.sentences.flatMap((sentence) => {
+      return sentence.headings || [];
+    });
+  }) satisfies SentenceHeading[];
+
   if (type === 'xml') {
     return generateXmlTree(
-      chapterParams,
+      parsedChapterParams,
       parsedMetadata,
       parsedPages,
       treeFootnotes,
+      treeHeadings,
       transformString,
     );
   }
 
   return generateJsonTree(
-    chapterParams,
+    parsedChapterParams,
     parsedMetadata,
     parsedPages,
     treeFootnotes,
+    treeHeadings,
     transformString,
   );
 };
