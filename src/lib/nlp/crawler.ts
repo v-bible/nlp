@@ -10,13 +10,15 @@ import {
   type GenerateTreeOptions,
   type GenerateTreeParams,
   generateDataTree,
+  generateJsonTree,
+  generateXmlTree,
 } from '@/lib/nlp/generateData';
 import {
   type ChapterParams,
   type DocumentParams,
   type GenreParams,
   type Metadata,
-  type MetadataRowCSV,
+  type MetadataRowCSVOutput,
   MetadataRowCSVSchema,
   MetadataSchema,
   type PageInput,
@@ -36,7 +38,7 @@ export type GetChaptersFunctionHref = CrawHref<{
   mdHref?: string;
 }>;
 
-export type GetMetadataByFunction = (metadata: MetadataRowCSV) => boolean;
+export type GetMetadataByFunction = (metadata: MetadataRowCSVOutput) => boolean;
 export type FilterCheckpointFunction = (
   checkpoint: Checkpoint<Metadata>,
 ) => boolean;
@@ -145,17 +147,11 @@ class Crawler {
       generateMultipleTrees = [
         {
           extension: 'xml',
-          generateTree: (params) =>
-            generateDataTree(params, {
-              type: 'xml',
-            }),
+          generateTree: (params) => generateXmlTree(generateDataTree(params)),
         },
         {
           extension: 'json',
-          generateTree: (params) =>
-            generateDataTree(params, {
-              type: 'json',
-            }),
+          generateTree: (params) => generateJsonTree(generateDataTree(params)),
         },
       ];
     }
@@ -189,7 +185,7 @@ class Crawler {
 
   async getMetadataList() {
     return new Promise<Metadata[]>((resolve, reject) => {
-      const metadataRowList: MetadataRowCSV[] = [];
+      const metadataRowList: MetadataRowCSVOutput[] = [];
 
       const tsvStream = readCsvFileStream(this.metadataFilePath, {
         delimiter: '\t',
@@ -301,7 +297,7 @@ class Crawler {
         const chapterParams = {
           ...documentParams,
           chapterNumber: props?.chapterNumber,
-          chapterName: props?.chapterName,
+          chapterName: props?.chapterName || '',
         };
 
         try {

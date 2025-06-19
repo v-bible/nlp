@@ -137,6 +137,8 @@ export const MetadataSchema = z.object({
   period: z.string().optional().default(''),
   publishedTime: z.string().optional().default(''),
   language: z.enum(languageCategories.map((lC) => lC.vietnamese)),
+  // NOTE: Should not include in dataTree
+  requiresManualCheck: z.boolean().optional().default(false),
   note: z.string().optional().default(''),
 });
 
@@ -171,10 +173,17 @@ export const MetadataRowCSVSchema = MetadataSchema.omit({
       falsy: ['false', '0'],
     })
     .default(false),
+  requiresManualCheck: z
+    .stringbool({
+      truthy: ['true', '1'],
+      falsy: ['false', '0'],
+    })
+    .default(false),
 });
 
 export type MetadataRowCSV = z.infer<typeof MetadataRowCSVSchema>;
 export type MetadataRowCSVInput = z.input<typeof MetadataRowCSVSchema>;
+export type MetadataRowCSVOutput = z.output<typeof MetadataRowCSVSchema>;
 
 export const FootnoteSchema = z.object({
   label: z.string(),
@@ -265,8 +274,8 @@ export const ChapterTreeSchema = z.object({
     file: z.object({
       id: z.string(),
       number: IdParamsSchema.shape.documentNumber,
-      meta: MetadataSchema.extend({
-        hasChapters: z.boolean().default(false),
+      meta: MetadataSchema.omit({
+        requiresManualCheck: true,
       }),
       sect: z.object({
         id: z.string(),
@@ -299,6 +308,8 @@ export const ChapterTreeSchema = z.object({
 });
 
 export type ChapterTree = z.infer<typeof ChapterTreeSchema>;
+export type ChapterTreeInput = z.input<typeof ChapterTreeSchema>;
+export type ChapterTreeOutput = z.output<typeof ChapterTreeSchema>;
 
 const mapMetadataRowCSVToMetadata = (row: MetadataRowCSV): Metadata => {
   return {
