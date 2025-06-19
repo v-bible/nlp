@@ -20,6 +20,7 @@ export type WithCheckpointParams<T extends Record<string, unknown>> = {
   getInitialData: () => Promise<T[]>;
   getCheckpointId: (item: T) => string;
   filterCheckpoint?: (data: Checkpoint<T>) => boolean;
+  sortCheckpoint?: (a: Checkpoint<T>, b: Checkpoint<T>) => number;
   filePath?: string;
   options?: WithCheckpointOptions<T>;
 };
@@ -38,6 +39,7 @@ const withCheckpoint = async <T extends Record<string, unknown>>({
   // NOTE: Function to set the checkpoint id based on the data
   getCheckpointId,
   filterCheckpoint,
+  sortCheckpoint,
   filePath = path.join(__dirname, '../../', './checkpoint.json'),
   options,
 }: WithCheckpointParams<T>): Promise<WithCheckpointReturn<T>> => {
@@ -87,6 +89,10 @@ const withCheckpoint = async <T extends Record<string, unknown>>({
     filteredCheckpoint = savedCheckpoint.filter((checkpoint) => {
       return !checkpoint.completed;
     });
+  }
+
+  if (sortCheckpoint) {
+    filteredCheckpoint.sort(sortCheckpoint);
   }
 
   return {

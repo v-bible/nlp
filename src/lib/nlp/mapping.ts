@@ -84,10 +84,10 @@ const genreCategories = [
   },
   {
     code: 'J',
-    category: '',
-    vietnamese: '',
+    category: 'gospel contemplation',
+    vietnamese: 'Suy niệm Lời Chúa',
     categoryType: 'genre',
-    isReserved: true,
+    isReserved: false,
   },
   {
     code: 'K',

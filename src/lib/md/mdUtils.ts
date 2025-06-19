@@ -7,6 +7,16 @@ export const reMdLink = /\[(?<alt>[^\]]*)\]\((?<link>[^)]*)\)/gm;
 export const reMdHr = /^\n*[-*_\s]{1,}\n*$/gm;
 export const reParagraphDelimiter = /\n{2,}/gm;
 export const reBulletEscape = /^ *\d+\\\.\s/gm;
+export const reQuoteSpaces = /" *(?<text>(?:[^"\\]|\\.)*?) *"/gm;
+export const reRoundBrackets = /\( *(?<text>[^)]*?) *\)/gm;
+export const reSquareBrackets = /\[ *(?<text>[^\]]*?) *\]/gm;
+export const reCurlyBrackets = /\{ *(?<text>[^}]*?) *\}/gm;
+// Match ***text*** or ___text___ (strong + italic)
+export const reAsteriskThreePair = /([*_]{3}) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+// Match **text** or __text__ (strong)
+export const reAsteriskTwoPair = /([*_]{2}) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+// Match *text* or _text_ (italic)
+export const reAsteriskOnePair = /([*_]) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
 
 const removeMdImgs = (
   text: string,
@@ -60,28 +70,70 @@ const removeBulletEscape = (text: string): string => {
   });
 };
 
+const removeRedundantSpaces = (text: string): string => {
+  return text
+    .replaceAll(reQuoteSpaces, (subStr, ...props) => {
+      // NOTE: text is the first capturing group
+      const textGr = props[0] as string;
+      return `"${textGr.trim()}"`;
+    })
+    .replaceAll(reRoundBrackets, (subStr, ...props) => {
+      // NOTE: text is the first capturing group
+      const textGr = props[0] as string;
+      return `(${textGr.trim()})`;
+    })
+    .replaceAll(reSquareBrackets, (subStr, ...props) => {
+      // NOTE: text is the first capturing group
+      const textGr = props[0] as string;
+      return `[${textGr.trim()}]`;
+    })
+    .replaceAll(reCurlyBrackets, (subStr, ...props) => {
+      // NOTE: text is the first capturing group
+      const textGr = props[0] as string;
+      return `{${textGr.trim()}}`;
+    });
+};
+
 const normalizeAsterisk = (text: string): string => {
-  const reAsteriskOnePair = /([*_]{1})( *)(?<text>[^*_\n]+)([*_]{1})/gm;
-  const reAsteriskTwoPair = /([*_]{2})( *)(?<text>[^*_\n]+)([*_]{2})/gm;
-  const reAsteriskThreePair = /([*_]{3})( *)(?<text>[^*_\n]+)([*_]{3})/gm;
+  // NOTE: We go from most nested to least nested: *** → ** → *
+  const regexes = [reAsteriskThreePair, reAsteriskTwoPair, reAsteriskOnePair];
 
-  // NOTE: Have to do from the most nested to the least nested.
-  const regex = [reAsteriskThreePair, reAsteriskTwoPair, reAsteriskOnePair];
-
-  return regex.reduce((acc, re) => {
+  return regexes.reduce((acc, re) => {
     return acc.replaceAll(re, (subStr, ...props) => {
-      const leftAsterisk = props[0] as string;
-      const leftPad = props[1] as string;
-      const rightAsterisk = props[3] as string;
-      // NOTE: text is the third capturing group
-      const textGr = props[2] as string;
-      // NOTE: Because we must including spaces in text group, to calculate
-      // rightPad, we minus the text group with trimEnd method
-      const rightPad = ' '.repeat(textGr.length - textGr.trimEnd().length);
+      // Group captures:
+      const marker = props[0] as string; // the * or _ marker (*, **, ***)
+      const textGr = props[1] as string; // the "text" inside the markers
 
-      return `${leftPad}${leftAsterisk}${textGr.trimEnd()}${rightAsterisk}${rightPad}`;
+      // We remove trailing space inside the emphasis text, but preserve spacing outside
+      const trimmed = textGr.trimEnd();
+      const rightPad = ' '.repeat(textGr.length - trimmed.length);
+
+      return `${marker}${trimmed}${marker}${rightPad}`;
     });
   }, text);
+};
+
+const normalizeQuotes = (text: string): string => {
+  return (
+    text
+      // Normalize all smart double quotes to straight double
+      .replaceAll('“', '"')
+      .replaceAll('”', '"')
+      .replaceAll('„', '"')
+      .replaceAll('‟', '"')
+      .replaceAll('″', '"')
+      .replaceAll('‶', '"')
+      .replaceAll('"', '"') // for consistency; optional
+
+      // Normalize all smart single quotes to straight single
+      .replaceAll('‘', "'")
+      .replaceAll('’', "'")
+      .replaceAll('‚', "'")
+      .replaceAll('‛', "'")
+      .replaceAll('′', "'")
+      .replaceAll('‵', "'")
+      .replaceAll("'", "'") // for consistency; optional
+  );
 };
 
 const normalizeWhitespace = (text: string): string => {
@@ -160,6 +212,8 @@ export {
   removeMdLinks,
   removeMdHr,
   removeBulletEscape,
+  removeRedundantSpaces,
+  normalizeQuotes,
   normalizeAsterisk,
   normalizeWhitespace,
   splitParagraph,

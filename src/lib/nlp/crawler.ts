@@ -10,19 +10,21 @@ import {
   type GenerateTreeOptions,
   type GenerateTreeParams,
   generateDataTree,
+  generateJsonTree,
+  generateXmlTree,
 } from '@/lib/nlp/generateData';
 import {
   type ChapterParams,
   type DocumentParams,
   type GenreParams,
   type Metadata,
-  type MetadataRowCSV,
+  type MetadataRowCSVOutput,
   MetadataRowCSVSchema,
   MetadataSchema,
   type PageInput,
   PageSchema,
-  mapMetadataRowCSVToMetadata,
 } from '@/lib/nlp/schema';
+import { mapMetadataRowCSVToMetadata } from '@/lib/nlp/schemaMapping';
 import { logger } from '@/logger/logger';
 
 export type CrawHref<T = Record<string, string>> = {
@@ -36,10 +38,14 @@ export type GetChaptersFunctionHref = CrawHref<{
   mdHref?: string;
 }>;
 
-export type GetMetadataByFunction = (metadata: MetadataRowCSV) => boolean;
+export type GetMetadataByFunction = (metadata: MetadataRowCSVOutput) => boolean;
 export type FilterCheckpointFunction = (
   checkpoint: Checkpoint<Metadata>,
 ) => boolean;
+export type SortCheckpointFunction = (
+  a: Checkpoint<Metadata>,
+  b: Checkpoint<Metadata>,
+) => number;
 
 export type GetChaptersFunction<
   T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
@@ -90,6 +96,8 @@ class Crawler {
 
   filterCheckpoint?: FilterCheckpointFunction;
 
+  sortCheckpoint?: SortCheckpointFunction;
+
   getChapters: GetChaptersFunction;
 
   getPageContent: GetPageContentFunction;
@@ -108,6 +116,7 @@ class Crawler {
     subDomain,
     getMetadataBy,
     filterCheckpoint,
+    sortCheckpoint,
     getChapters,
     getPageContent,
     getPageContentMd,
@@ -120,6 +129,7 @@ class Crawler {
     name: string;
     getMetadataBy: GetMetadataByFunction;
     filterCheckpoint?: FilterCheckpointFunction;
+    sortCheckpoint?: SortCheckpointFunction;
     getChapters: GetChaptersFunction;
     getPageContent: GetPageContentFunction;
     getPageContentMd?: GetPageContentMdFunction;
@@ -137,6 +147,7 @@ class Crawler {
 
     this.getMetadataBy = getMetadataBy;
     this.filterCheckpoint = filterCheckpoint;
+    this.sortCheckpoint = sortCheckpoint;
     this.getChapters = getChapters;
     this.getPageContent = getPageContent;
     this.getPageContentMd = getPageContentMd;
@@ -145,17 +156,11 @@ class Crawler {
       generateMultipleTrees = [
         {
           extension: 'xml',
-          generateTree: (params) =>
-            generateDataTree(params, {
-              type: 'xml',
-            }),
+          generateTree: (params) => generateXmlTree(generateDataTree(params)),
         },
         {
           extension: 'json',
-          generateTree: (params) =>
-            generateDataTree(params, {
-              type: 'json',
-            }),
+          generateTree: (params) => generateJsonTree(generateDataTree(params)),
         },
       ];
     }
@@ -189,7 +194,7 @@ class Crawler {
 
   async getMetadataList() {
     return new Promise<Metadata[]>((resolve, reject) => {
-      const metadataRowList: MetadataRowCSV[] = [];
+      const metadataRowList: MetadataRowCSVOutput[] = [];
 
       const tsvStream = readCsvFileStream(this.metadataFilePath, {
         delimiter: '\t',
@@ -240,6 +245,8 @@ class Crawler {
             ? this.filterCheckpoint(checkpoint)
             : !checkpoint.completed;
         },
+        sortCheckpoint: this.sortCheckpoint,
+
         filePath: this.checkpointFilePath,
         options: this.checkpointOptions,
       });
@@ -301,7 +308,7 @@ class Crawler {
         const chapterParams = {
           ...documentParams,
           chapterNumber: props?.chapterNumber,
-          chapterName: props?.chapterName,
+          chapterName: props?.chapterName || '',
         };
 
         try {
