@@ -13,12 +13,11 @@ const main = async () => {
         metadataRow.sourceType === 'web'
       );
     },
-    filterCheckpoint: (checkpoint) => {
-      const ignore = [
-        'https://hdgmvietnam.com/chi-tiet/toan-van-tong-huan-quedira-amazonia-amazon-yeu-quy--39152',
-      ];
-
-      return !ignore.includes(checkpoint.params.sourceURL);
+    sortCheckpoint: (a, b) => {
+      return (
+        Number(a.params.requiresManualCheck === true) -
+        Number(b.params.requiresManualCheck === true)
+      );
     },
     getChapters: async ({ resourceHref }) => {
       // NOTE: These pages have no chapters

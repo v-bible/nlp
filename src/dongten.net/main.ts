@@ -12,6 +12,12 @@ const main = async () => {
         metadataRow.source === 'dongten.net' && metadataRow.sourceType === 'web'
       );
     },
+    sortCheckpoint: (a, b) => {
+      return (
+        Number(a.params.requiresManualCheck === true) -
+        Number(b.params.requiresManualCheck === true)
+      );
+    },
     filterCheckpoint: (checkpoint) => {
       // REVIEW: Currently we get non chapter pages first
       return !checkpoint.completed && !checkpoint.params.hasChapters;

@@ -31,6 +31,12 @@ const main = async () => {
         metadataRow.source === 'ktcgkpv.org' && metadataRow.sourceType === 'web'
       );
     },
+    sortCheckpoint: (a, b) => {
+      return (
+        Number(a.params.requiresManualCheck === true) -
+        Number(b.params.requiresManualCheck === true)
+      );
+    },
     getChapters: async ({ resourceHref }) => {
       const bookCode = resourceHref.href.split('/').pop();
 
