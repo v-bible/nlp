@@ -8,11 +8,13 @@ import { extractHeading, removeAllHeading } from '@/lib/md/headingUtils';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
+  normalizeQuotes,
   normalizeWhitespace,
   removeBulletEscape,
   removeMdHr,
   removeMdImgs,
   removeMdLinks,
+  removeRedundantSpaces,
   splitParagraph,
   stripMd,
 } from '@/lib/md/mdUtils';
@@ -142,6 +144,8 @@ const getPageContent = (async ({ resourceHref, chapterParams }) => {
     // NOTE: Have to run first so the asterisk regex can match correctly
     normalizeWhitespace,
     normalizeAsterisk,
+    normalizeQuotes,
+    removeRedundantSpaces,
     (str) => {
       // NOTE: Some pages has a list number which has multiple newlines, so we
       // have to remove newlines before the list number
