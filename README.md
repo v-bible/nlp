@@ -51,7 +51,13 @@
   - [Prerequisites](#bangbang-prerequisites)
   - [Run Locally](#running-run-locally)
 - [Usage](#eyes-usage)
-
+  - [Category Guidelines](#category-guidelines)
+    - [Category ID](#category-id)
+    - [Folder Structure](#folder-structure)
+    - [Category References](#category-references)
+  - [Named Entity Recognition (NER)](#named-entity-recognition-ner)
+    - [Entity Label Categories](#entity-label-categories)
+    - [NER Labeling Procedure](#ner-labeling-procedure)
 - [Contributing](#wave-contributing)
   - [Code of Conduct](#scroll-code-of-conduct)
 - [License](#warning-license)
@@ -120,7 +126,7 @@ git clone https://github.com/v-bible/nlp.git
 Go to the project directory:
 
 ```bash
-cd mobile
+cd nlp
 ```
 
 Install dependencies:
@@ -190,6 +196,7 @@ catholic-resources
     └── <genre>
         └── <domain><subDomain><genre>_fff (<documentTitle>)
             ├── <domain><subDomain><genre>_fff.ccc.xml
+            ├── <domain><subDomain><genre>_fff.ccc.json
             ├── <domain><subDomain><genre>_fff.ccc.md
             └── ...
 ```
@@ -218,15 +225,15 @@ catholic-resources
 
 | code |           category            |        vietnamese        |
 | :--: | :---------------------------: | :----------------------: |
-|  A   |                               |                          |
+|  A   |     advent contemplation      |    Suy niệm Mùa Vọng     |
 |  B   |                               |                          |
 |  C   |          catechesis           |    Giáo lý/Giáo huấn     |
 |  D   |        church document        |    Văn kiện Giáo Hội     |
 |  E   |      exegesis/commentary      |    Chú giải/Bình luận    |
-|  F   |                               |                          |
-|  G   |                               |                          |
-|  H   |                               |                          |
-|  I   |         contemplation         |         Suy niệm         |
+|  F   |      lent contemplation       |    Suy niệm Mùa Chay     |
+|  G   |     easter contemplation      |  Suy niệm Mùa Phục Sinh  |
+|  H   |       ot contemplation        | Suy niệm Mùa Thường Niên |
+|  I   |      other contemplation      |      Suy niệm khác       |
 |  J   |                               |                          |
 |  K   |                               |                          |
 |  L   |          liturgical           |         Phụng vụ         |
@@ -240,7 +247,7 @@ catholic-resources
 |  T   |           theology            |         Thần học         |
 |  V   |                               |                          |
 |  W   |                               |                          |
-|  X   |                               |                          |
+|  X   |    chirstmas contemplation    | Suy niệm Mùa Giáng Sinh  |
 |  Y   |          philosophy           |        Triết học         |
 |  Z   |            others             |           Khác           |
 
@@ -296,6 +303,25 @@ catholic-resources
 |      |                                      jubilee year                                       |                                  Năm Thánh                                  |
 
 </details>
+
+### Named Entity Recognition (NER)
+
+#### Entity Label Categories
+
+| label | category |              examples              |          vietnamese examples           |
+| :---: | :------: | :--------------------------------: | :------------------------------------: |
+|  PER  |  person  | Jesus, Mary, Peter, Paul, John,... | Giêsu, Maria, Phêrô, Phaolô, Gioan,... |
+|  LOC  | location |   Jerusalem, Rome, Bethlehem,...   |      Giêrusalem, Rôma, Bêlem,...       |
+|  ORG  |   org    |    Vatican, Catholic Church,...    |    Vatican, Giáo Hội Công Giáo,...     |
+| TITLE |  title   |     Pope, Bishop, Cardinal,...     |    Giáo hoàng, Giám mục, Hồng y,...    |
+|  TME  |   time   |    Sunday, Monday, January,...     |  Chúa Nhật, Thứ Hai, Tháng Giêng,...   |
+|  NUM  |  number  |         1, 2, 3, 4, 5,...          |           1, 2, 3, 4, 5,...            |
+
+#### NER Labeling Procedure
+
+Please use Label Studio to label the NER data. Please refer to the
+[v-bible/nlp-label-studio](https://github.com/v-bible/nlp-label-studio) for
+setuping Label Studio.
 
 <!-- Contributing -->
 
