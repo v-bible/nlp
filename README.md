@@ -55,9 +55,11 @@
     - [Category ID](#category-id)
     - [Folder Structure](#folder-structure)
     - [Category References](#category-references)
+  - [Document Metadata](#document-metadata)
   - [Named Entity Recognition (NER)](#named-entity-recognition-ner)
     - [Entity Label Categories](#entity-label-categories)
-    - [NER Labeling Procedure](#ner-labeling-procedure)
+    - [Setup Label Tools](#setup-label-tools)
+    - [Label Procedure](#label-procedure)
 - [Contributing](#wave-contributing)
   - [Code of Conduct](#scroll-code-of-conduct)
 - [License](#warning-license)
@@ -78,11 +80,25 @@ your `.env` file:
 
   - `LOG_LEVEL`: Log level.
 
+- **Label Studio configs:**
+
+  > [!NOTE]:
+  > These environments only required for `ner-processing` scripts to connect to
+  > Label Studio instance.
+
+  - `LABEL_STUDIO_URL`: URL of the Label Studio instance. E.g.:
+    `http://localhost:8080`.
+  - `LABEL_STUDIO_LEGACY_TOKEN`: Legacy token for Label Studio API. You can
+    generate it in the Label Studio settings page.
+
 E.g:
 
 ```
 # .env
 LOG_LEVEL=info
+
+LABEL_STUDIO_URL=http://localhost:8080
+LABEL_STUDIO_LEGACY_TOKEN=eyJhb***
 ```
 
 You can also check out the file `.env.example` to see all required environment
@@ -146,7 +162,7 @@ pnpm install
 - **Sentence ID**: Each sentence ID **MUST** have the following format:
 
   ```
-  <domain><subDomain><genre>_<sentence_id>_fff.ccc.ppp.ss
+  <domain><subDomain><genre>_fff.ccc.ppp.ss
   ```
 
   - `domain`: Domain code. **Format**: 1 character, in uppercase. E.g: `R`.
@@ -206,6 +222,10 @@ catholic-resources
 
 #### Category References
 
+> [!NOTE]
+> Any changes to the category references should be reflected in the
+> [`src/lib/nlp/mapping.ts`](./src/lib/nlp/mapping.ts) file.
+
 - Domains:
 
 | code | category | vietnamese |
@@ -245,9 +265,10 @@ catholic-resources
 |  R   |                               |                          |
 |  S   | saint/beatification biography | Tiểu sử Thánh/Chân phước |
 |  T   |           theology            |         Thần học         |
+|  U   |                               |                          |
 |  V   |                               |                          |
 |  W   |                               |                          |
-|  X   |    chirstmas contemplation    | Suy niệm Mùa Giáng Sinh  |
+|  X   |    christmas contemplation    | Suy niệm Mùa Giáng Sinh  |
 |  Y   |          philosophy           |        Triết học         |
 |  Z   |            others             |           Khác           |
 
@@ -304,24 +325,153 @@ catholic-resources
 
 </details>
 
+### Document Metadata
+
+Document Metadata is stored in the [data/main.tsv](./data/main.tsv), which is
+downloaded from Google Sheets [\[NLP\] Danh sách tài liệu Công
+giáo](https://docs.google.com/spreadsheets/d/1YETFmWnGOM1E2Z0pLMkxkqHczyzCmIbqptQ25VFuBGM/edit?usp=sharing)
+and is updated periodically.
+
+> [!IMPORTANT]
+> Only export file to `TSV` format, do not export to `CSV` format.
+
 ### Named Entity Recognition (NER)
 
 #### Entity Label Categories
 
-| label | category |              examples              |          vietnamese examples           |
-| :---: | :------: | :--------------------------------: | :------------------------------------: |
-|  PER  |  person  | Jesus, Mary, Peter, Paul, John,... | Giêsu, Maria, Phêrô, Phaolô, Gioan,... |
-|  LOC  | location |   Jerusalem, Rome, Bethlehem,...   |      Giêrusalem, Rôma, Bêlem,...       |
-|  ORG  |   org    |    Vatican, Catholic Church,...    |    Vatican, Giáo Hội Công Giáo,...     |
-| TITLE |  title   |     Pope, Bishop, Cardinal,...     |    Giáo hoàng, Giám mục, Hồng y,...    |
-|  TME  |   time   |    Sunday, Monday, January,...     |  Chúa Nhật, Thứ Hai, Tháng Giêng,...   |
-|  NUM  |  number  |         1, 2, 3, 4, 5,...          |           1, 2, 3, 4, 5,...            |
+> [!NOTE]
+> Any changes to the category references should be reflected in the
+> [`src/lib/ner/mapping.ts`](./src/lib/ner/mapping.ts) file.
 
-#### NER Labeling Procedure
+| label |   category   |              examples              |          vietnamese examples           |
+| :---: | :----------: | :--------------------------------: | :------------------------------------: |
+|  PER  |    person    | Jesus, Mary, Peter, Paul, John,... | Giêsu, Maria, Phêrô, Phaolô, Gioan,... |
+|  LOC  |   location   |   Jerusalem, Rome, Bethlehem,...   |      Giêrusalem, Rôma, Bêlem,...       |
+|  ORG  | organization |    Vatican, Catholic Church,...    |    Vatican, Giáo Hội Công Giáo,...     |
+| TITLE |    title     |     Pope, Bishop, Cardinal,...     |    Giáo hoàng, Giám mục, Hồng y,...    |
+|  TME  |     time     |    Sunday, Monday, January,...     |  Chúa Nhật, Thứ Hai, Tháng Giêng,...   |
+|  NUM  |    number    |         1, 2, 3, 4, 5,...          |           1, 2, 3, 4, 5,...            |
 
-Please use Label Studio to label the NER data. Please refer to the
+#### Setup Label Tools
+
+Please use [Label Studio](https://labelstud.io/) to label the NER data. Please
+refer to the
 [v-bible/nlp-label-studio](https://github.com/v-bible/nlp-label-studio) for
 setuping Label Studio.
+
+#### Label Procedure
+
+> [!NOTE]
+> Instead labeling all the sentences in the corpus at once, we should **chunk
+> the corpus into genres**, and then label each genre separately. This will help
+> to reduce the complexity of the labeling process and make it easier to manage.
+
+The label procedure is as follows:
+
+1.  Extract NER tasks:
+
+    - Use script
+      [`src/ner-processing/extract-ner-task.ts`](./src/ner-processing/extract-ner-task.ts) to
+      extract NER tasks from the corpus data tree.
+
+    - Read JSON corpus data tree from `dist/corpus` **by genre** and write output
+      to `dist/task-data`.
+
+    - The output structure:
+
+      ```
+      dist/task-data
+      └── <genre>
+          ├── <domain><subDomain><genre>_fff.ccc.json
+          └── ...
+      ```
+
+    - The data is stored in JSON format, which is compatible with Label Studio.
+      It may contains annotated data from previous labeling sessions, these will
+      be imported as ground truth data.
+
+      > [!NOTE]
+      > If the task has not been labeled yet, don't add any annotations to the
+      > task data, else it will be considered as ground truth data.
+
+      Sample data:
+
+      ```json
+      [
+        {
+          "data": {
+            "text": "Đây là gia phả Đức Giê-su Ki-tô, con cháu vua Đa-vít, con cháu tổ phụ Áp-ra-ham :",
+            "documentId": "RCN_001",
+            "chapterId": "RCN_001.001",
+            "sentenceId": "RCN_001.001.001.01",
+            "sentenceType": "single",
+            "title": "Phúc Âm theo Thánh Mát-thêu",
+            "genreCode": "N"
+          },
+          "annotations": [
+            {
+              "result": [
+                {
+                  "value": {
+                    "start": 15,
+                    "end": 31,
+                    "text": "Đức Giê-su Ki-tô",
+                    "labels": ["PER"]
+                  },
+                  "from_name": "label",
+                  "to_name": "text",
+                  "type": "labels"
+                },
+                {
+                  "value": {
+                    "start": 42,
+                    "end": 52,
+                    "text": "vua Đa-vít",
+                    "labels": ["PER"]
+                  },
+                  "from_name": "label",
+                  "to_name": "text",
+                  "type": "labels"
+                },
+                {
+                  "value": {
+                    "start": 63,
+                    "end": 79,
+                    "text": "tổ phụ Áp-ra-ham",
+                    "labels": ["PER"]
+                  },
+                  "from_name": "label",
+                  "to_name": "text",
+                  "type": "labels"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+      ```
+
+2.  Import NER tasks to Label Studio:
+
+    - Import the NER tasks by creating a new project and selecting the `dist/task-data`
+      folder as the data source, or use script
+      [`src/ner-processing/import-ner-task.ts`](./src/ner-processing/import-ner-task.ts)
+      (**recommended**)
+      to import NER tasks to Label Studio using Label Studio API.
+
+3.  Label NER tasks:
+
+    - Use Label Studio to label the NER tasks. The labeling interface is
+      configured in the project settings, which is described in the
+      [v-bible/nlp-label-studio](https://github.com/v-bible/nlp-label-studio)
+      repository.
+
+4.  Export NER labels:
+
+    - Use script
+      [`src/ner-processing/export-ner-task.ts`](./src/ner-processing/export-ner-task.ts)
+      to export the NER tasks from Label Studio and inject annotations into the
+      corpus data tree.
 
 <!-- Contributing -->
 
