@@ -137,6 +137,8 @@ export const MetadataSchema = z.object({
   period: z.string().optional().default(''),
   publishedTime: z.string().optional().default(''),
   language: z.enum(languageCategories.map((lC) => lC.vietnamese)),
+  // NOTE: Should not include in dataTree
+  requiresManualCheck: z.boolean().optional().default(false),
   note: z.string().optional().default(''),
 });
 
@@ -171,10 +173,17 @@ export const MetadataRowCSVSchema = MetadataSchema.omit({
       falsy: ['false', '0'],
     })
     .default(false),
+  requiresManualCheck: z
+    .stringbool({
+      truthy: ['true', '1'],
+      falsy: ['false', '0'],
+    })
+    .default(false),
 });
 
 export type MetadataRowCSV = z.infer<typeof MetadataRowCSVSchema>;
 export type MetadataRowCSVInput = z.input<typeof MetadataRowCSVSchema>;
+export type MetadataRowCSVOutput = z.output<typeof MetadataRowCSVSchema>;
 
 export const FootnoteSchema = z.object({
   label: z.string(),
@@ -184,12 +193,14 @@ export const FootnoteSchema = z.object({
 
 export type Footnote = z.infer<typeof FootnoteSchema>;
 
+// NOTE: Add sentenceId to FootnoteSchema to link footnotes to sentences
 export const SentenceFootnoteSchema = FootnoteSchema.extend({
   sentenceId: z.string(),
 });
 
 export type SentenceFootnote = z.infer<typeof SentenceFootnoteSchema>;
 
+// NOTE: Usually footnotes order is only known when building chapter tree
 export const TreeFootnoteSchema = SentenceFootnoteSchema.extend({
   order: z.number().gte(0),
 });
@@ -204,31 +215,38 @@ export const HeadingSchema = z.object({
 
 export type Heading = z.infer<typeof HeadingSchema>;
 
+// NOTE: SentenceHeadingSchema is used to link headings to sentences
 export const SentenceHeadingSchema = HeadingSchema.extend({
   sentenceId: z.string(),
 });
 
 export type SentenceHeading = z.infer<typeof SentenceHeadingSchema>;
 
-export const SingleLanguageSentenceSchema = z.object({
+export const SentenceTypeSchema = z.enum(['single', 'multiple']);
+
+export type SentenceType = z.infer<typeof SentenceTypeSchema>;
+
+const BaseSentenceSchema = z.object({
   id: z.string(),
-  type: z.enum(['single']),
-  text: z.string(),
-  footnotes: SentenceFootnoteSchema.array().optional(),
+  type: SentenceTypeSchema,
   headings: SentenceHeadingSchema.array().optional(),
   extraAttributes: z
     .record(CamelCaseStringSchema, z.string().or(z.number()).or(z.boolean()))
     .optional(),
 });
 
+export const SingleLanguageSentenceSchema = BaseSentenceSchema.extend({
+  type: SentenceTypeSchema.extract(['single']),
+  text: z.string(),
+  footnotes: SentenceFootnoteSchema.array().optional(),
+});
+
 export type SingleLanguageSentence = z.infer<
   typeof SingleLanguageSentenceSchema
 >;
 
-export const MultiLanguageSentenceSchema = z.object({
-  id: z.string(),
-  type: z.enum(['multiple']),
-  headings: SentenceHeadingSchema.array().optional(),
+export const MultiLanguageSentenceSchema = BaseSentenceSchema.extend({
+  type: SentenceTypeSchema.extract(['multiple']),
   array: z
     .object({
       languageCode: z.enum(languageCategories.map((lC) => lC.code)),
@@ -236,9 +254,6 @@ export const MultiLanguageSentenceSchema = z.object({
       footnotes: SentenceFootnoteSchema.array().optional(),
     })
     .array(),
-  extraAttributes: z
-    .record(z.string().uppercase(), z.string().or(z.number()).or(z.boolean()))
-    .optional(),
 });
 
 export type MultiLanguageSentence = z.infer<typeof MultiLanguageSentenceSchema>;
@@ -265,8 +280,8 @@ export const ChapterTreeSchema = z.object({
     file: z.object({
       id: z.string(),
       number: IdParamsSchema.shape.documentNumber,
-      meta: MetadataSchema.extend({
-        hasChapters: z.boolean().default(false),
+      meta: MetadataSchema.omit({
+        requiresManualCheck: true,
       }),
       sect: z.object({
         id: z.string(),
@@ -299,25 +314,5 @@ export const ChapterTreeSchema = z.object({
 });
 
 export type ChapterTree = z.infer<typeof ChapterTreeSchema>;
-
-const mapMetadataRowCSVToMetadata = (row: MetadataRowCSV): Metadata => {
-  return {
-    ...row,
-    genre: {
-      code: row.genreCode,
-      category: row.genreCategory,
-      vietnamese: row.genreVietnamese,
-    },
-    tags: row.tagCategory.map((tC) => {
-      return {
-        category: tC,
-        vietnamese:
-          // NOTE: MetadataSchema will validate whether the vietnamese
-          // translation matches the category
-          tagCategories.find((t) => t.category === tC)?.vietnamese || '',
-      };
-    }),
-  };
-};
-
-export { mapMetadataRowCSVToMetadata };
+export type ChapterTreeInput = z.input<typeof ChapterTreeSchema>;
+export type ChapterTreeOutput = z.output<typeof ChapterTreeSchema>;

@@ -1,16 +1,15 @@
-import { getPageContent } from '@/hdgmvietnam.com/getPageContent';
-import { getPageContentMd } from '@/hdgmvietnam.com/getPageContentMd';
+import { getPageContent } from '@/dongten.net/getPageContent';
+import { getPageContentMd } from '@/dongten.net/getPageContentMd';
 import { Crawler } from '@/lib/nlp/crawler';
 
 const main = async () => {
   const crawler = new Crawler({
-    name: 'hdgmvietnam.com',
+    name: 'dongten.net',
     domain: 'R',
     subDomain: 'C',
     getMetadataBy: (metadataRow) => {
       return (
-        metadataRow.source === 'hdgmvietnam.com' &&
-        metadataRow.sourceType === 'web'
+        metadataRow.source === 'dongten.net' && metadataRow.sourceType === 'web'
       );
     },
     sortCheckpoint: (a, b) => {
@@ -18,6 +17,10 @@ const main = async () => {
         Number(a.params.requiresManualCheck === true) -
         Number(b.params.requiresManualCheck === true)
       );
+    },
+    filterCheckpoint: (checkpoint) => {
+      // REVIEW: Currently we get non chapter pages first
+      return !checkpoint.completed && !checkpoint.params.hasChapters;
     },
     getChapters: async ({ resourceHref }) => {
       // NOTE: These pages have no chapters

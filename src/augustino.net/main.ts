@@ -14,6 +14,12 @@ const main = async () => {
         metadataRow.sourceType === 'web'
       );
     },
+    sortCheckpoint: (a, b) => {
+      return (
+        Number(a.params.requiresManualCheck === true) -
+        Number(b.params.requiresManualCheck === true)
+      );
+    },
     getChapters,
     getPageContent,
     getPageContentMd,

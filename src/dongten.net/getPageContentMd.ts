@@ -32,34 +32,13 @@ const getPageContentMd = (async ({ resourceHref }) => {
     },
   );
 
-  await page.evaluate(() => {
-    // NOTE: Remove table element although remark-gfm still can parse it
-    document.querySelectorAll('table').forEach((el) => el.remove());
-  });
-
-  const bodyLocator = page.locator(
-    'div[class="detail-article main-content" i] > div',
-  );
+  const bodyLocator = page
+    .locator('div[class*="post-inner"]')
+    .locator('div[class*="entry"]');
 
   await bodyLocator.evaluate((node) => {
-    const allLinkEl = node.querySelectorAll('a');
-
-    for (const linkEl of allLinkEl) {
-      const fnName = linkEl.getAttribute('name');
-
-      if (!fnName) {
-        continue;
-      }
-
-      if (
-        (fnName.includes('_ftn') || fnName.includes('_edn')) &&
-        !fnName.includes('ref')
-      ) {
-        // NOTE: We have to add a colon to the end of the footnote label so it
-        // will confront with github-flavored markdown
-        linkEl.innerHTML = `[${linkEl.textContent?.replace('[', '').replace(']', '')}:]`;
-      }
-    }
+    // NOTE: Remove post share buttons
+    node.querySelector('div[class*="share-post"]')?.remove();
   });
 
   const bodyHtml = await bodyLocator.innerHTML();
@@ -69,9 +48,6 @@ const getPageContentMd = (async ({ resourceHref }) => {
 
   const md = await parseMd(bodyHtml);
 
-  const fnRegex =
-    /\[[^\\[]*(\\\[)?(?<label>[^\\]*)(\\\])?[^\\\]]*\]\(([^)]*)\)/gm;
-
   const cleanupMd = cleanupMdProcessor(md, [
     removeMdImgs,
     (str) =>
@@ -79,17 +55,6 @@ const getPageContentMd = (async ({ resourceHref }) => {
         useLinkAsAlt: false,
       }),
     removeMdHr,
-    (str) => {
-      return str.replaceAll(fnRegex, (subStr, ...props) => {
-        // NOTE: Label is the second capturing group
-        const label = props[1];
-        // NOTE: The colon we injected above will be included in the label
-        if (label.includes(':')) {
-          return `[^${label.replace(':', '')}]:`;
-        }
-        return `[^${label}]`;
-      });
-    },
     removeBulletEscape,
     // NOTE: Have to run first so the asterisk regex can match correctly
     normalizeWhitespace,
