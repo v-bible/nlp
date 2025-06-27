@@ -1,6 +1,6 @@
 import { remark } from 'remark';
 import stripMarkdown from 'strip-markdown';
-import { reHeading } from './headingUtils';
+import { reHeading } from '@/lib/md/headingUtils';
 
 export const reMdImg = /!\[(?<alt>[^\]]*)\]\((?<link>[^)]*)\)/gm;
 export const reMdLink = /\[(?<alt>[^\]]*)\]\((?<link>[^)]*)\)/gm;

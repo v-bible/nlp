@@ -198,6 +198,8 @@ class Crawler {
 
       const tsvStream = readCsvFileStream(this.metadataFilePath, {
         delimiter: '\t',
+        // NOTE: Avoid quote conflicts in TSV files
+        quote: '',
       });
 
       tsvStream.on('data', (row: string) => {

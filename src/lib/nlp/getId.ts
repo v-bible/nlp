@@ -7,6 +7,9 @@ import {
   type SentenceParams,
 } from '@/lib/nlp/schema';
 
+const reSentenceId =
+  /^(?<domain>[A-Z])(?<subDomain>[A-Z])(?<genre>[A-Z])_(?<documentNumber>0[0-9]{2}|[1-9][0-9]{2})(?:\.(?<chapterNumber>0[0-9]{2}|[1-9][0-9]{2})(?:\.(?<pageNumber>0[0-9]{2}|[1-9][0-9]{2})(?:\.(?<sentenceNumber>0[1-9]|[1-9][0-9]))?)?)?$/;
+
 // NOTE: Base prefix format: DSG
 const getBasePrefix = (params: GenreParams) => {
   IdParamsSchema.omit({
@@ -65,4 +68,49 @@ const getSentenceId = (params: SentenceParams) => {
   return `${getPageId(params)}.${params.sentenceNumber.toString().padStart(2, '0')}`;
 };
 
-export { getBasePrefix, getDocumentId, getChapterId, getPageId, getSentenceId };
+const parseId = (id: string) => {
+  const match = id.match(reSentenceId);
+  if (!match || !match.groups) return null;
+
+  const {
+    domain,
+    subDomain,
+    genre,
+    documentNumber,
+    chapterNumber,
+    pageNumber,
+    sentenceNumber,
+  } = match.groups;
+
+  const parse = IdParamsSchema.partial().parse({
+    domain: domain?.toUpperCase(),
+    subDomain: subDomain?.toUpperCase(),
+    genre: genre?.toUpperCase(),
+    documentNumber: documentNumber ? parseInt(documentNumber, 10) : undefined,
+    chapterNumber: chapterNumber ? parseInt(chapterNumber, 10) : undefined,
+    pageNumber: pageNumber ? parseInt(pageNumber, 10) : undefined,
+    sentenceNumber: sentenceNumber ? parseInt(sentenceNumber, 10) : undefined,
+  });
+
+  return {
+    // eslint-disable-next-line no-nested-ternary
+    level: sentenceNumber
+      ? 'sentence'
+      : // eslint-disable-next-line no-nested-ternary
+        pageNumber
+        ? 'page'
+        : chapterNumber
+          ? 'chapter'
+          : 'document',
+    ...parse,
+  };
+};
+
+export {
+  getBasePrefix,
+  getDocumentId,
+  getChapterId,
+  getPageId,
+  getSentenceId,
+  parseId,
+};
