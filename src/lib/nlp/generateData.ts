@@ -249,6 +249,7 @@ const generateXmlTree = (chapterTree: ChapterTreeOutput): string => {
                       return x(
                         'ANNOTATION',
                         {
+                          ID: annotation?.id || '',
                           START: annotation.start.toString(),
                           END: annotation.end.toString(),
                           LABEL: annotation.labels[0]!,
