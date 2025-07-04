@@ -2,13 +2,13 @@ import { isValid, parse } from 'date-fns';
 import { u } from 'unist-builder';
 import { toXml } from 'xast-util-to-xml';
 import { type Child, x } from 'xastscript';
+import { wrapNERLabel } from '@/lib/ner/nerUtils';
+import { type SentenceEntityAnnotation } from '@/lib/ner/schema';
 import { getChapterId, getDocumentId } from '@/lib/nlp/getId';
 import {
   type ChapterParams,
   ChapterParamsSchema,
-  type ChapterTree,
-  type ChapterTreeOutput,
-  ChapterTreeSchema,
+  type LanguageCode,
   type MetadataInput,
   MetadataSchema,
   type PageInput,
@@ -17,6 +17,11 @@ import {
   type SentenceHeading,
   type TreeFootnote,
 } from '@/lib/nlp/schema';
+import {
+  type ChapterTree,
+  type ChapterTreeOutput,
+  ChapterTreeSchema,
+} from '@/lib/nlp/treeSchema';
 
 const newLineIndent = (level: number, indentationSize = 2) => {
   return u('text', `\n${' '.repeat(level * indentationSize)}`);
@@ -59,7 +64,13 @@ export type GenerateTreeParams = {
 };
 
 export type GenerateTreeOptions = {
-  transformString?: (str: string) => string;
+  transformString?: (
+    str: string,
+    params: {
+      sentenceId: string;
+      languageCode?: LanguageCode;
+    },
+  ) => string;
   parseDate?: (date: string) => Date;
 };
 
@@ -187,44 +198,67 @@ const generateXmlTree = (chapterTree: ChapterTreeOutput): string => {
                 );
               }),
 
-              x(
-                'FOOTNOTES',
-                {},
-                ...generateIndent(
-                  4,
-                  chapterTree.root.file.sect.footnotes?.map((footnote) => {
-                    return x(
-                      'FOOTNOTE',
-                      {
-                        SENTENCE_ID: footnote.sentenceId,
-                        LABEL: footnote.label,
-                        POSITION: footnote.position,
-                        ORDER: footnote.order,
-                      },
-                      footnote.text,
-                    );
-                  }) || [],
+              chapterTree.root.file.sect.footnotes &&
+                x(
+                  'FOOTNOTES',
+                  {},
+                  ...generateIndent(
+                    4,
+                    chapterTree.root.file.sect.footnotes.map((footnote) => {
+                      return x(
+                        'FOOTNOTE',
+                        {
+                          SENTENCE_ID: footnote.sentenceId,
+                          LABEL: footnote.label,
+                          POSITION: footnote.position,
+                          ORDER: footnote.order,
+                        },
+                        footnote.text,
+                      );
+                    }) || [],
+                  ),
                 ),
-              ),
 
-              x(
-                'HEADINGS',
-                {},
-                ...generateIndent(
-                  4,
-                  chapterTree.root.file.sect.headings?.map((heading) => {
-                    return x(
-                      'HEADING',
-                      {
-                        SENTENCE_ID: heading.sentenceId,
-                        LEVEL: heading.level,
-                        ORDER: heading.order,
-                      },
-                      heading.text,
-                    );
-                  }) || [],
+              chapterTree.root.file.sect.headings &&
+                x(
+                  'HEADINGS',
+                  {},
+                  ...generateIndent(
+                    4,
+                    chapterTree.root.file.sect.headings.map((heading) => {
+                      return x(
+                        'HEADING',
+                        {
+                          SENTENCE_ID: heading.sentenceId,
+                          LEVEL: heading.level,
+                          ORDER: heading.order,
+                        },
+                        heading.text,
+                      );
+                    }) || [],
+                  ),
                 ),
-              ),
+
+              chapterTree.root.file.sect.annotations &&
+                x(
+                  'ANNOTATIONS',
+                  {},
+                  ...generateIndent(
+                    4,
+                    chapterTree.root.file.sect.annotations.map((annotation) => {
+                      return x(
+                        'ANNOTATION',
+                        {
+                          ID: annotation?.id || '',
+                          START: annotation.start.toString(),
+                          END: annotation.end.toString(),
+                          LABEL: annotation.labels[0]!,
+                        },
+                        annotation.text,
+                      );
+                    }) || [],
+                  ),
+                ),
             ]),
           ),
         ]),
@@ -241,7 +275,12 @@ const generateJsonTree = (chapterTree: ChapterTreeOutput): string => {
 };
 
 const generateDataTree = (
-  { chapterParams, metadata, pages }: GenerateTreeParams,
+  {
+    chapterParams,
+    metadata,
+    pages,
+    annotations,
+  }: GenerateTreeParams & { annotations?: SentenceEntityAnnotation[] },
   options?: GenerateTreeOptions,
 ): ChapterTreeOutput => {
   const {
@@ -338,7 +377,9 @@ const generateDataTree = (
                     id: sentence.id,
                     type: sentence.type,
                     extraAttributes: sentence.extraAttributes,
-                    text: transformString(sentence.text),
+                    text: transformString(sentence.text, {
+                      sentenceId: sentence.id,
+                    }),
                   };
                 }
 
@@ -349,7 +390,10 @@ const generateDataTree = (
                   array: sentence.array.map((lang) => {
                     return {
                       languageCode: lang.languageCode,
-                      text: transformString(lang.text),
+                      text: transformString(lang.text, {
+                        sentenceId: sentence.id,
+                        languageCode: lang.languageCode,
+                      }),
                     };
                   }),
                 };
@@ -358,6 +402,7 @@ const generateDataTree = (
           }),
           footnotes: treeFootnotes,
           headings: treeHeadings,
+          annotations,
         },
       },
     },
@@ -369,10 +414,39 @@ const generateDataTree = (
   return parsedTree;
 };
 
+const generateDataTreeWithAnnotation = (
+  {
+    chapterParams,
+    metadata,
+    pages,
+    annotations,
+  }: GenerateTreeParams & { annotations: SentenceEntityAnnotation[] },
+  options?: GenerateTreeOptions,
+): ChapterTreeOutput => {
+  return generateDataTree(
+    { chapterParams, metadata, pages, annotations },
+    {
+      ...options,
+      transformString: (str, { sentenceId, languageCode }) => {
+        const sentenceAnnotations = annotations.filter(
+          (annotation) =>
+            annotation.sentenceId === sentenceId &&
+            annotation?.languageCode === languageCode,
+        );
+
+        const newStr = wrapNERLabel(str, sentenceAnnotations);
+
+        return newStr;
+      },
+    },
+  );
+};
+
 export {
   newLineIndent,
   generateIndent,
   generateDataTree,
+  generateDataTreeWithAnnotation,
   generateXmlTree,
   generateJsonTree,
 };

@@ -1,7 +1,12 @@
-import { createReadStream, mkdirSync, writeFileSync } from 'fs';
+import { createReadStream, mkdirSync, readdirSync, writeFileSync } from 'fs';
+import path from 'path';
 import { type ParserOptionsArgs, parseStream } from 'fast-csv';
 import { getChapterId, getDocumentId } from '@/lib/nlp/getId';
-import { type ChapterParams, type MetadataRowCSV } from '@/lib/nlp/schema';
+import {
+  type ChapterParams,
+  type GenreParams,
+  type MetadataRowCSV,
+} from '@/lib/nlp/schema';
 import { logger } from '@/logger/logger';
 
 const writeChapterContent = ({
@@ -61,4 +66,19 @@ const readCsvFileStream = <T extends MetadataRowCSV>(
   return parseStream<T, T>(stream, parserOptions);
 };
 
-export { writeChapterContent, readCsvFileStream };
+const walkDirectoryByGenre = (
+  baseDir: string,
+  genre: GenreParams['genre'],
+): string[] => {
+  const genreDir = path.join(baseDir, genre);
+
+  return readdirSync(genreDir, {
+    encoding: 'utf8',
+    recursive: true,
+    withFileTypes: true,
+  })
+    .filter((dirent) => dirent.isFile())
+    .map((dirent) => path.join(dirent.parentPath, dirent.name));
+};
+
+export { writeChapterContent, readCsvFileStream, walkDirectoryByGenre };

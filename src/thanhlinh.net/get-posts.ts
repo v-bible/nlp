@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-syntax */
-import { appendFile, writeFile } from 'node:fs/promises';
+import { appendFileSync, writeFileSync } from 'fs';
 import retry from 'async-retry';
 import { format, parse } from 'date-fns';
 import { chromium, devices } from 'playwright';
@@ -135,7 +135,7 @@ const fetchPosts = async (link: string) => {
       `Fetched post: ${title} - ${newLink} - ${fmtDate} - ${publisher} - ${fmtDate}`,
     );
 
-    await appendFile(
+    appendFileSync(
       'thanhlinh-posts.csv',
       `"";${(title || '').trim()};"";${publisher};Bài viết;Web;${newLink.trim()};https://thanhlinh.net/;21;${fmtDate};""`,
     );
@@ -146,7 +146,7 @@ const fetchPosts = async (link: string) => {
 };
 
 (async () => {
-  await writeFile(
+  writeFileSync(
     'thanhlinh-posts.csv',
     'STT;Tên;Nhóm;Tác giả;Thể loại;Định dạng;Link;Nguồn;Thế kỷ;Thời gian;Ghi chú\n',
   );

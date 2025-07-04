@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { ChapterTreeSchema } from '@/lib//nlp/schema';
+import { ChapterTreeSchema } from '@/lib//nlp/treeSchema';
 
 interface FileStats {
   fileName: string;
