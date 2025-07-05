@@ -12,11 +12,12 @@ export const reRoundBrackets = /\( *(?<text>[^)]*?) *\)/gm;
 export const reSquareBrackets = /\[ *(?<text>[^\]]*?) *\]/gm;
 export const reCurlyBrackets = /\{ *(?<text>[^}]*?) *\}/gm;
 // Match ***text*** or ___text___ (strong + italic)
-export const reAsteriskThreePair = /([*_]{3}) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+export const reAsteriskThreePair =
+  /([*_]{3}) *(?<text>[^*_][^\n]*?[^*_]?) *\1/gm;
 // Match **text** or __text__ (strong)
-export const reAsteriskTwoPair = /([*_]{2}) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+export const reAsteriskTwoPair = /([*_]{2}) *(?<text>[^*_][^\n]*?[^*_]?) *\1/gm;
 // Match *text* or _text_ (italic)
-export const reAsteriskOnePair = /([*_]) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+export const reAsteriskOnePair = /([*_]) *(?<text>[^*_][^\n]*?[^*_]?) *\1/gm;
 
 const removeMdImgs = (
   text: string,
@@ -64,7 +65,7 @@ const removeMdHr = (text: string): string => {
   return text.replaceAll(reMdHr, '');
 };
 
-const removeBulletEscape = (text: string): string => {
+const removeNumberBulletEscape = (text: string): string => {
   return text.replaceAll(reBulletEscape, (subStr) => {
     return subStr.replace('\\', '');
   });
@@ -92,6 +93,11 @@ const removeRedundantSpaces = (text: string): string => {
       const textGr = props[0] as string;
       return `{${textGr.trim()}}`;
     });
+};
+
+const removeRedundantCharacters = (text: string) => {
+  // NOTE: Remove all markdown characters from the text
+  return text.replaceAll(/["'*_`~\\-]/gm, ''); // Remove markdown formatting characters
 };
 
 const normalizeAsterisk = (text: string): string => {
@@ -159,6 +165,32 @@ const normalizeWhitespace = (text: string): string => {
     .replaceAll('\u3000', ' '); // Ideographic Space
 };
 
+const normalizeBackslash = (text: string): string => {
+  // Normalize backslashes to newlines
+  return text.replaceAll('\\\n', '\n\n');
+};
+
+const normalizeNumberBullet = (text: string): string => {
+  // Ensure there's a space after the number in numbered lists
+  return text.replaceAll(/^(\d+).\s*/gm, (subStr, ...props) => {
+    // The first capturing group is the number
+    const number = props[0];
+    return `${number}. `; // Add a space after the number
+  });
+};
+
+const normalizeMd = (text: string): string => {
+  // Remove leading whitespace from each line
+  return (
+    text
+      .replaceAll(/^ +/gm, '')
+      // Remove empty heading
+      .replaceAll(/^#{1,6} +\n$/gm, '')
+      // Remove redundant newlines
+      .replaceAll(/\n{2,}/gm, '\n\n')
+  );
+};
+
 const splitParagraph = (
   text: string,
   options?: {
@@ -211,11 +243,15 @@ export {
   removeMdImgs,
   removeMdLinks,
   removeMdHr,
-  removeBulletEscape,
+  removeNumberBulletEscape,
   removeRedundantSpaces,
+  removeRedundantCharacters,
   normalizeQuotes,
   normalizeAsterisk,
   normalizeWhitespace,
+  normalizeBackslash,
+  normalizeNumberBullet,
+  normalizeMd,
   splitParagraph,
   stripMd,
   cleanupMdProcessor,
