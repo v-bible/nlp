@@ -19,6 +19,10 @@ const main = async () => {
         Number(b.params.requiresManualCheck === true)
       );
     },
+    filterCheckpoint: (checkpoint) => {
+      // REVIEW: Currently we get non chapter pages first
+      return !checkpoint.completed && !checkpoint.params.hasChapters;
+    },
     getChapters: async ({ resourceHref }) => {
       // NOTE: These pages have no chapters
       return [

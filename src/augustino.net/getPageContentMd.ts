@@ -5,9 +5,10 @@ import { chromium, devices } from 'playwright';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
+  normalizeMd,
+  normalizeNumberBullet,
   normalizeQuotes,
   normalizeWhitespace,
-  removeBulletEscape,
   removeMdHr,
   removeMdImgs,
   removeMdLinks,
@@ -85,11 +86,12 @@ const getPageContentMd = (async ({ resourceHref }) => {
         return `[${label}]`;
       });
     },
-    removeBulletEscape,
     // NOTE: Have to run first so the asterisk regex can match correctly
     normalizeWhitespace,
     normalizeAsterisk,
     normalizeQuotes,
+    normalizeNumberBullet,
+    normalizeMd,
     removeRedundantSpaces,
     (str) => {
       // NOTE: Some pages has a list number which has multiple newlines, so we
@@ -101,7 +103,7 @@ const getPageContentMd = (async ({ resourceHref }) => {
     },
   ]);
 
-  return cleanupMd;
+  return cleanupMd.trim();
 }) satisfies GetPageContentMdFunction;
 
 export { getPageContentMd };

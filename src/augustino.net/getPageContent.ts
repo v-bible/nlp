@@ -1,6 +1,5 @@
 /* eslint-disable no-restricted-syntax */
 /* eslint-disable no-continue */
-import sentencize from '@stdlib/nlp-sentencize';
 import retry from 'async-retry';
 import { type Page, chromium, devices } from 'playwright';
 import { extractFootnote, removeAllFootnote } from '@/lib/md/footnoteUtils';
@@ -8,9 +7,9 @@ import { extractHeading, removeAllHeading } from '@/lib/md/headingUtils';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
+  normalizeNumberBullet,
   normalizeQuotes,
   normalizeWhitespace,
-  removeBulletEscape,
   removeMdHr,
   removeMdImgs,
   removeMdLinks,
@@ -22,6 +21,7 @@ import { parseMd } from '@/lib/md/remark';
 import { type GetPageContentFunction } from '@/lib/nlp/crawler';
 import { getPageId, getSentenceId } from '@/lib/nlp/getId';
 import { type Footnote, type SingleLanguageSentence } from '@/lib/nlp/schema';
+import { winkNLPInstance } from '@/lib/wink-nlp';
 import { logger } from '@/logger/logger';
 
 const extractFootnoteRef = async (
@@ -140,11 +140,11 @@ const getPageContent = (async ({ resourceHref, chapterParams }) => {
         return `[${label}]`;
       });
     },
-    removeBulletEscape,
     // NOTE: Have to run first so the asterisk regex can match correctly
     normalizeWhitespace,
     normalizeAsterisk,
     normalizeQuotes,
+    normalizeNumberBullet,
     removeRedundantSpaces,
     (str) => {
       // NOTE: Some pages has a list number which has multiple newlines, so we
@@ -179,7 +179,11 @@ const getPageContent = (async ({ resourceHref, chapterParams }) => {
     // splitting sentences
     const sentences = stripParagraph
       .split('\\\n')
-      .flatMap((subP) => sentencize(subP))
+      .flatMap((subP) => winkNLPInstance.readDoc(subP).sentences().out())
+      .filter((sentence) => {
+        // NOTE: Filter out empty sentences
+        return sentence.trim().length > 0;
+      })
       .map((sentence) => {
         const footnotes = extractFootnote(sentence).flatMap((fnPos) => {
           const footnoteRef = footnoteRefs.find(

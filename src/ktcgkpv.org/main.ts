@@ -1,6 +1,5 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import sentencize from '@stdlib/nlp-sentencize';
 import { groupBy } from 'es-toolkit';
 import {
   extractFootnote,
@@ -15,6 +14,7 @@ import {
   type PageInput,
   type SingleLanguageSentence,
 } from '@/lib/nlp/schema';
+import { winkNLPInstance } from '@/lib/wink-nlp';
 import { logger } from '@/logger/logger';
 
 const main = async () => {
@@ -138,7 +138,10 @@ const main = async () => {
 
                 // NOTE: Since some verses might have multiple sentences, we have
                 // to use tokenizer to split them into sentences.
-                const sentences = sentencize(verseWithFootnotesAndRefs);
+                const sentences = winkNLPInstance
+                  .readDoc(verseWithFootnotesAndRefs)
+                  .sentences()
+                  .out();
 
                 return sentences.map((sentence, idx) => {
                   // First, we extract footnotes and references from the split

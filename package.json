@@ -30,6 +30,8 @@
     "undici": "7.10.0",
     "unified": "11.0.5",
     "unist-builder": "4.0.0",
+    "wink-eng-lite-web-model": "1.8.1",
+    "wink-nlp": "2.4.0",
     "winston": "3.17.0",
     "xast-util-to-xml": "4.0.0",
     "xastscript": "4.0.0",

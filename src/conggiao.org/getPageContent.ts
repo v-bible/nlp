@@ -1,6 +1,5 @@
 /* eslint-disable no-restricted-syntax */
 /* eslint-disable no-continue */
-import sentencize from '@stdlib/nlp-sentencize';
 import retry from 'async-retry';
 import { chromium, devices } from 'playwright';
 import { removeAllFootnote } from '@/lib/md/footnoteUtils';
@@ -8,9 +7,9 @@ import { extractHeading, removeAllHeading } from '@/lib/md/headingUtils';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
+  normalizeNumberBullet,
   normalizeQuotes,
   normalizeWhitespace,
-  removeBulletEscape,
   removeMdHr,
   removeMdImgs,
   removeMdLinks,
@@ -22,6 +21,7 @@ import { parseMd } from '@/lib/md/remark';
 import { type GetPageContentFunction } from '@/lib/nlp/crawler';
 import { getPageId, getSentenceId } from '@/lib/nlp/getId';
 import { type SingleLanguageSentence } from '@/lib/nlp/schema';
+import { winkNLPInstance } from '@/lib/wink-nlp';
 
 const getPageContent = (async ({ resourceHref, chapterParams }) => {
   const { href } = resourceHref;
@@ -56,11 +56,11 @@ const getPageContent = (async ({ resourceHref, chapterParams }) => {
         useLinkAsAlt: false,
       }),
     removeMdHr,
-    removeBulletEscape,
     // NOTE: Have to run first so the asterisk regex can match correctly
     normalizeWhitespace,
     normalizeAsterisk,
     normalizeQuotes,
+    normalizeNumberBullet,
     removeRedundantSpaces,
   ]);
 
@@ -87,7 +87,11 @@ const getPageContent = (async ({ resourceHref, chapterParams }) => {
     // splitting sentences
     const sentences = stripParagraph
       .split('\\\n')
-      .flatMap((subP) => sentencize(subP))
+      .flatMap((subP) => winkNLPInstance.readDoc(subP).sentences().out())
+      .filter((sentence) => {
+        // NOTE: Filter out empty sentences
+        return sentence.trim().length > 0;
+      })
       .map((sentence) => {
         return {
           type: 'single',
