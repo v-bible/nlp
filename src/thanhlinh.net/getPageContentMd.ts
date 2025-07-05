@@ -5,11 +5,16 @@ import { chromium, devices } from 'playwright';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
+  normalizeBackslash,
+  normalizeMd,
+  normalizeNumberBullet,
+  normalizeQuotes,
   normalizeWhitespace,
-  removeBulletEscape,
   removeMdHr,
   removeMdImgs,
   removeMdLinks,
+  removeNumberBulletEscape,
+  removeRedundantSpaces,
 } from '@/lib/md/mdUtils';
 import { parseMd } from '@/lib/md/remark';
 import { type GetPageContentMdFunction } from '@/lib/nlp/crawler';
@@ -47,13 +52,18 @@ const getPageContentMd = (async ({ resourceHref }) => {
         useLinkAsAlt: false,
       }),
     removeMdHr,
-    removeBulletEscape,
+    removeNumberBulletEscape,
     // NOTE: Have to run first so the asterisk regex can match correctly
     normalizeWhitespace,
     normalizeAsterisk,
+    normalizeQuotes,
+    normalizeBackslash,
+    normalizeNumberBullet,
+    normalizeMd,
+    removeRedundantSpaces,
   ]);
 
-  return cleanupMd;
+  return cleanupMd.trim();
 }) satisfies GetPageContentMdFunction;
 
 export { getPageContentMd };

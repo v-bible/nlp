@@ -20,6 +20,10 @@ const main = async () => {
         Number(b.params.requiresManualCheck === true)
       );
     },
+    filterCheckpoint: (checkpoint) => {
+      // REVIEW: Currently we get non chapter pages first
+      return !checkpoint.completed && !checkpoint.params.hasChapters;
+    },
     getChapters,
     getPageContent,
     getPageContentMd,
