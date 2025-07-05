@@ -52,29 +52,31 @@ const extractFootnote = (
 ): Omit<Footnote, 'text'>[] => {
   const matches = text.matchAll(labelRegex);
 
-  return [...matches].map((matchVal, idx, arr) => {
-    if (idx === 0) {
+  return [...matches]
+    .map((matchVal, idx, arr) => {
+      if (idx === 0) {
+        return {
+          position: matchVal.index,
+          label: labelSelector(matchVal),
+        };
+      }
+
+      let previousLength = 0;
+      // NOTE: We want the whole string match so get the zero index
+      const previousMatch = arr.slice(0, idx).map((match) => match['0']);
+      // eslint-disable-next-line no-restricted-syntax
+      for (const match of previousMatch) {
+        previousLength += match.length;
+      }
+
       return {
-        position: matchVal.index,
+        // NOTE: We minus previousLength to get the correct position because the
+        // current match also includes the previous matches
+        position: matchVal.index - previousLength,
         label: labelSelector(matchVal),
       };
-    }
-
-    let previousLength = 0;
-    // NOTE: We want the whole string match so get the zero index
-    const previousMatch = arr.slice(0, idx).map((match) => match['0']);
-    // eslint-disable-next-line no-restricted-syntax
-    for (const match of previousMatch) {
-      previousLength += match.length;
-    }
-
-    return {
-      // NOTE: We minus previousLength to get the correct position because the
-      // current match also includes the previous matches
-      position: matchVal.index - previousLength,
-      label: labelSelector(matchVal),
-    };
-  });
+    })
+    .filter((note) => note.label.trim().length > 0);
 };
 
 const removeAllFootnote = (text: string, labelRegex: RegExp = reFootnote) => {

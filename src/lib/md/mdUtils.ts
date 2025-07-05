@@ -6,17 +6,19 @@ export const reMdImg = /!\[(?<alt>[^\]]*)\]\((?<link>[^)]*)\)/gm;
 export const reMdLink = /\[(?<alt>[^\]]*)\]\((?<link>[^)]*)\)/gm;
 export const reMdHr = /^\n*[-*_\s]{1,}\n*$/gm;
 export const reParagraphDelimiter = /\n{2,}/gm;
-export const reBulletEscape = /^ *\d+\\\.\s/gm;
 export const reQuoteSpaces = /" *(?<text>(?:[^"\\]|\\.)*?) *"/gm;
 export const reRoundBrackets = /\( *(?<text>[^)]*?) *\)/gm;
 export const reSquareBrackets = /\[ *(?<text>[^\]]*?) *\]/gm;
 export const reCurlyBrackets = /\{ *(?<text>[^}]*?) *\}/gm;
 // Match ***text*** or ___text___ (strong + italic)
-export const reAsteriskThreePair = /([*_]{3}) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+export const reAsteriskThreePair =
+  /([*_]{3}) *(?<text>[^*_\n][^\n]*?[^*_\n]?) *\1/gm;
 // Match **text** or __text__ (strong)
-export const reAsteriskTwoPair = /([*_]{2}) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+export const reAsteriskTwoPair =
+  /([*_]{2}) *(?<text>[^*_\n][^\n]*?[^*_\n]?) *\1/gm;
 // Match *text* or _text_ (italic)
-export const reAsteriskOnePair = /([*_]) *(?<text>[^*_][^]*?[^*_]?) *\1/gm;
+export const reAsteriskOnePair =
+  /([*_]{1}) *(?<text>[^*_\n][^\n]*?[^*_\n]?) *\1/gm;
 
 const removeMdImgs = (
   text: string,
@@ -64,12 +66,6 @@ const removeMdHr = (text: string): string => {
   return text.replaceAll(reMdHr, '');
 };
 
-const removeBulletEscape = (text: string): string => {
-  return text.replaceAll(reBulletEscape, (subStr) => {
-    return subStr.replace('\\', '');
-  });
-};
-
 const removeRedundantSpaces = (text: string): string => {
   return text
     .replaceAll(reQuoteSpaces, (subStr, ...props) => {
@@ -105,7 +101,7 @@ const normalizeAsterisk = (text: string): string => {
       const textGr = props[1] as string; // the "text" inside the markers
 
       // We remove trailing space inside the emphasis text, but preserve spacing outside
-      const trimmed = textGr.trimEnd();
+      const trimmed = textGr.replace(/\*$/, '').trimEnd();
       const rightPad = ' '.repeat(textGr.length - trimmed.length);
 
       return `${marker}${trimmed}${marker}${rightPad}`;
@@ -159,6 +155,29 @@ const normalizeWhitespace = (text: string): string => {
     .replaceAll('\u3000', ' '); // Ideographic Space
 };
 
+const normalizeNumberBullet = (text: string): string => {
+  // Ensure there's a space after the number in numbered lists
+  return text.replaceAll(/^(\d+).\s*/gm, (subStr, ...props) => {
+    // The first capturing group is the number
+    const number = props[0];
+    return `${number}. `; // Add a space after the number
+  });
+};
+
+const normalizeMd = (text: string): string => {
+  return (
+    text
+      // Remove leading whitespace from each line
+      .replaceAll(/^ +/gm, '')
+      // Remove empty heading
+      .replaceAll(/^#{1,6} +\n$/gm, '')
+      // Normalize backslashes to newlines
+      .replaceAll('\\\n', '\n\n')
+      // Remove redundant newlines
+      .replaceAll(/\n{2,}/gm, '\n\n')
+  );
+};
+
 const splitParagraph = (
   text: string,
   options?: {
@@ -197,7 +216,17 @@ const splitParagraph = (
 };
 
 const stripMd = (text: string): string => {
-  return remark().use(stripMarkdown).processSync(text).toString();
+  return (
+    remark()
+      .use(stripMarkdown)
+      .processSync(text)
+      .toString()
+      // NOTE: Consider to keep "[" and "]" in the text
+      .replaceAll('\\[', '[')
+      .replaceAll('\\]', ']')
+      .replaceAll('\\`', '`')
+      .replaceAll(/["'*_~\\-]/gm, '')
+  );
 };
 
 const cleanupMdProcessor = (
@@ -211,11 +240,12 @@ export {
   removeMdImgs,
   removeMdLinks,
   removeMdHr,
-  removeBulletEscape,
   removeRedundantSpaces,
   normalizeQuotes,
   normalizeAsterisk,
   normalizeWhitespace,
+  normalizeNumberBullet,
+  normalizeMd,
   splitParagraph,
   stripMd,
   cleanupMdProcessor,
