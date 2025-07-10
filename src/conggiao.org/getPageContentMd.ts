@@ -2,6 +2,7 @@
 /* eslint-disable no-continue */
 import retry from 'async-retry';
 import { chromium, devices } from 'playwright';
+import Bluebird from '@/lib/bluebird';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
@@ -17,49 +18,69 @@ import {
 import { parseMd } from '@/lib/md/remark';
 import { type GetPageContentMdFunction } from '@/lib/nlp/crawler';
 
-const getPageContentMd = (async ({ resourceHref }) => {
-  const { href } = resourceHref;
+const getPageContentMd = (({ resourceHref }) => {
+  return new Bluebird.Promise(async (resolve, reject, onCancel) => {
+    const { href } = resourceHref;
 
-  const browser = await chromium.launch();
-  const context = await browser.newContext(devices['Desktop Chrome']);
-  const page = await context.newPage();
+    const browser = await chromium.launch();
+    const context = await browser.newContext(devices['Desktop Chrome']);
+    const page = await context.newPage();
 
-  await retry(
-    async () => {
-      await page.goto(href);
-    },
-    {
-      retries: 5,
-    },
-  );
+    try {
+      // Set up cancellation handler after resources are created
+      onCancel!(async () => {
+        await page.close();
+        await context.close();
+        await browser.close();
 
-  const bodyHtml = await page
-    .locator('article')
-    .locator('div[class*="post_content"]')
-    .innerHTML();
+        reject(new Error('Operation was cancelled'));
+      });
 
-  await context.close();
-  await browser.close();
+      await retry(
+        async () => {
+          await page.goto(href);
+        },
+        {
+          retries: 5,
+        },
+      );
 
-  const md = await parseMd(bodyHtml);
+      const bodyHtml = await page
+        .locator('article')
+        .locator('div[class*="post_content"]')
+        .innerHTML();
 
-  const cleanupMd = cleanupMdProcessor(md, [
-    removeMdImgs,
-    (str) =>
-      removeMdLinks(str, {
-        useLinkAsAlt: false,
-      }),
-    removeMdHr,
-    // NOTE: Have to run first so the asterisk regex can match correctly
-    normalizeWhitespace,
-    normalizeAsterisk,
-    normalizeQuotes,
-    normalizeNumberBullet,
-    normalizeMd,
-    removeRedundantSpaces,
-  ]);
+      await context.close();
+      await browser.close();
 
-  return cleanupMd.trim();
+      const md = await parseMd(bodyHtml);
+
+      const cleanupMd = cleanupMdProcessor(md, [
+        removeMdImgs,
+        (str) =>
+          removeMdLinks(str, {
+            useLinkAsAlt: false,
+          }),
+        removeMdHr,
+        // NOTE: Have to run first so the asterisk regex can match correctly
+        normalizeWhitespace,
+        normalizeAsterisk,
+        normalizeQuotes,
+        normalizeNumberBullet,
+        normalizeMd,
+        removeRedundantSpaces,
+      ]);
+
+      resolve(cleanupMd.trim());
+    } catch (error) {
+      // Clean up resources on error
+      await page.close();
+      await context.close();
+      await browser.close();
+
+      reject(error);
+    }
+  });
 }) satisfies GetPageContentMdFunction;
 
 export { getPageContentMd };
