@@ -15,7 +15,7 @@ import {
   normalizeQuotes,
   normalizeWhitespace,
   removeRedundantSpaces,
-  stripMd,
+  stripSymbols,
 } from '@/lib/md/mdUtils';
 import { Crawler, type GetChaptersFunction } from '@/lib/nlp/crawler';
 import { getPageId, getSentenceId } from '@/lib/nlp/getId';
@@ -159,7 +159,7 @@ const main = async () => {
                     ],
                   );
 
-                  const stripContent = stripMd(cleanupMd);
+                  const stripContent = stripSymbols(cleanupMd);
 
                   const verseWithFootnotesAndRefs = injectFootnote(
                     stripContent,

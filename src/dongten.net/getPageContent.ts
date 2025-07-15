@@ -16,7 +16,7 @@ import {
   removeMdLinks,
   removeRedundantSpaces,
   splitParagraph,
-  stripMd,
+  stripSymbols,
 } from '@/lib/md/mdUtils';
 import { parseMd } from '@/lib/md/remark';
 import { type GetPageContentFunction } from '@/lib/nlp/crawler';
@@ -99,7 +99,7 @@ const getPageContent = (({ resourceHref, chapterParams }) => {
         // NOTE: If there are any headings in the paragraph, we will remove them
         p = removeAllHeading(p);
 
-        const stripParagraph = stripMd(p).trim();
+        const stripParagraph = stripSymbols(p).trim();
 
         // NOTE: Have to split markdown paragraphs by `\\\n` from markdown before
         // splitting sentences
@@ -132,7 +132,7 @@ const getPageContent = (({ resourceHref, chapterParams }) => {
                 sentenceNumber === 0
                   ? paragraphHeadings.map((heading) => ({
                       ...heading,
-                      text: stripMd(heading.text).trim(),
+                      text: stripSymbols(heading.text).trim(),
                       sentenceId: newSentenceId,
                     }))
                   : [],

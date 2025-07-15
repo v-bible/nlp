@@ -215,7 +215,7 @@ const splitParagraph = (
   return paragraphs.map((p) => p.trim());
 };
 
-const stripMd = (text: string): string => {
+const stripSymbols = (text: string): string => {
   return (
     remark()
       .use(stripMarkdown)
@@ -225,7 +225,7 @@ const stripMd = (text: string): string => {
       .replaceAll('\\[', '[')
       .replaceAll('\\]', ']')
       .replaceAll('\\`', '`')
-      .replaceAll(/["'*_~\\-]/gm, '')
+      .replaceAll(/["'*_~\\]/gm, '')
   );
 };
 
@@ -247,6 +247,6 @@ export {
   normalizeNumberBullet,
   normalizeMd,
   splitParagraph,
-  stripMd,
+  stripSymbols,
   cleanupMdProcessor,
 };
