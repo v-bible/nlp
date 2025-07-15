@@ -12,6 +12,8 @@ import 'dotenv/config';
 const main = async () => {
   const BASE_URL = process.env.LABEL_STUDIO_URL || 'http://localhost:8080';
   const LABEL_STUDIO_LEGACY_TOKEN = process.env.LABEL_STUDIO_LEGACY_TOKEN || '';
+  const LABEL_STUDIO_PROJECT_TITLE =
+    process.env.LABEL_STUDIO_PROJECT_TITLE || 'v-bible';
 
   const currentGenre = 'N' satisfies GenreParams['genre'];
 
@@ -30,8 +32,9 @@ const main = async () => {
     })
   ).json();
 
-  const vBibleProject = allProjects?.results?.find(
-    (project: Record<string, unknown>) => project.title === 'v-bible',
+  const projectInfo = allProjects?.results?.find(
+    (project: Record<string, unknown>) =>
+      project.title === LABEL_STUDIO_PROJECT_TITLE,
   );
 
   for await (const taskFilePath of jsonFiles) {
@@ -46,7 +49,7 @@ const main = async () => {
       continue;
     }
 
-    await fetch(`${BASE_URL}/api/projects/${vBibleProject.id}/import`, {
+    await fetch(`${BASE_URL}/api/projects/${projectInfo.id}/import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -87,6 +87,9 @@ your `.env` file:
     `http://localhost:8080`.
   - `LABEL_STUDIO_LEGACY_TOKEN`: Legacy token for Label Studio API. You can
     generate it in the Label Studio settings page.
+  - `LABEL_STUDIO_PROJECT_TITLE`: Title of the Label Studio project. This is used to
+    import and export NER tasks, in `src/ner-processing/import-ner-task.ts` and
+    `src/ner-processing/export-ner-task.ts` scripts.
 
 > [!NOTE]
 > These environments only required for `ner-processing` scripts to connect to
@@ -100,6 +103,7 @@ LOG_LEVEL=info
 
 LABEL_STUDIO_URL=http://localhost:8080
 LABEL_STUDIO_LEGACY_TOKEN=eyJhb***
+LABEL_STUDIO_PROJECT_TITLE=v-bible
 ```
 
 You can also check out the file `.env.example` to see all required environment
