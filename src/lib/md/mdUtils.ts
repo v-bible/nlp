@@ -4,7 +4,7 @@ import { reHeading } from '@/lib/md/headingUtils';
 
 export const reMdImg = /!\[(?<alt>[^\]]*)\]\((?<link>[^)]*)\)/gm;
 export const reMdLink = /\[(?<alt>[^\]]*)\]\((?<link>[^)]*)\)/gm;
-export const reMdHr = /^\n*[-*_\s]{1,}\n*$/gm;
+export const reMdHr = /^\n*(\\?[-*_=\s]){1,}\n*$/gm;
 export const reParagraphDelimiter = /\n{2,}/gm;
 export const reQuoteSpaces = /" *(?<text>(?:[^"\\]|\\.)*?) *"/gm;
 export const reRoundBrackets = /\( *(?<text>[^)]*?) *\)/gm;
@@ -175,6 +175,10 @@ const normalizeMd = (text: string): string => {
       .replaceAll('\\\n', '\n\n')
       // Remove redundant newlines
       .replaceAll(/\n{2,}/gm, '\n\n')
+      // Add space after unordered list markers
+      .replaceAll(/^[-] */gm, (subStr) => {
+        return `${subStr.trim()} `;
+      })
   );
 };
 
@@ -221,6 +225,8 @@ const stripSymbols = (text: string): string => {
       .use(stripMarkdown)
       .processSync(text)
       .toString()
+      // Remove unordered list escaped characters
+      .replaceAll(/^\\?[*-] */gm, '')
       // NOTE: Consider to keep "[" and "]" in the text
       .replaceAll('\\[', '[')
       .replaceAll('\\]', ']')

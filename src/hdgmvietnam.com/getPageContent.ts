@@ -8,6 +8,7 @@ import { extractHeading, removeAllHeading } from '@/lib/md/headingUtils';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
+  normalizeMd,
   normalizeNumberBullet,
   normalizeQuotes,
   normalizeWhitespace,
@@ -151,6 +152,7 @@ const getPageContent = (({ resourceHref, chapterParams }) => {
         normalizeAsterisk,
         normalizeQuotes,
         normalizeNumberBullet,
+        normalizeMd,
         removeRedundantSpaces,
       ]);
 
@@ -207,11 +209,15 @@ const getPageContent = (({ resourceHref, chapterParams }) => {
 
             return {
               type: 'single',
-              text: removeAllFootnote(sentence),
+              text: removeAllFootnote(sentence).trim(),
               footnotes,
             } satisfies Omit<SingleLanguageSentence, 'id' | 'footnotes'> & {
               footnotes: Footnote[];
             };
+          })
+          .filter((sentence) => {
+            // NOTE: Filter out sentences that are only footnotes
+            return sentence.text.length > 0;
           })
           .map((sentence, sentenceNumber) => {
             const newSentenceId = getSentenceId({

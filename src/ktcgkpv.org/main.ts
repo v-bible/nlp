@@ -127,7 +127,7 @@ const main = async () => {
                       return {
                         text: fn.content as string,
                         position: fn.position as number,
-                        label: `${fn.order}` as string,
+                        label: `${(fn.order as number) + 1}` as string,
                       };
                     });
 
@@ -142,7 +142,7 @@ const main = async () => {
                         position: ref.position as number,
                         // NOTE: We add asterisk to the label to indicate it's a
                         // reference and not a footnote.
-                        label: `${ref.order}*`,
+                        label: `${(ref.order as number) + 1}@`,
                       };
                     });
 
@@ -159,17 +159,19 @@ const main = async () => {
                     ],
                   );
 
-                  const stripContent = stripSymbols(cleanupMd);
+                  // NOTE: Have to run before stripping markdown to prevent
+                  // position of footnotes and refs from being changed.
+                  const verseWithFootnotesAndRefs = injectFootnote(cleanupMd, [
+                    ...verseFootnotes,
+                    ...verseRefs,
+                  ]);
 
-                  const verseWithFootnotesAndRefs = injectFootnote(
-                    stripContent,
-                    [...verseFootnotes, ...verseRefs],
-                  );
+                  const stripContent = stripSymbols(verseWithFootnotesAndRefs);
 
                   // NOTE: Since some verses might have multiple sentences, we have
                   // to use tokenizer to split them into sentences.
                   const sentences = winkNLPInstance
-                    .readDoc(verseWithFootnotesAndRefs)
+                    .readDoc(stripContent)
                     .sentences()
                     .out();
 
@@ -183,9 +185,9 @@ const main = async () => {
                       // sentence.
                       const sentenceFootnotes = extractFootnote(
                         sentence,
-                        /\[(?<label>[a-zA-Z0-9*]+)\]/gm,
+                        /\[(?<label>[a-zA-Z0-9@]+)\]/gm,
                       ).flatMap((fn) => {
-                        const isReference = fn.label.endsWith('*');
+                        const isReference = fn.label.endsWith('@');
 
                         let verseFootnote: Record<string, unknown> | null =
                           null;
@@ -225,7 +227,7 @@ const main = async () => {
 
                       return {
                         type: 'single',
-                        text: removeAllFootnote(sentence) as string,
+                        text: removeAllFootnote(sentence).trim() as string,
                         // NOTE: Headings always belong to the first sentence
                         headings: idx === 0 ? verseHeadings : [],
                         footnotes: sentenceFootnotes,
@@ -245,6 +247,10 @@ const main = async () => {
                         headings: Heading[];
                       };
                     });
+                })
+                .filter((sentence) => {
+                  // NOTE: Filter out sentences that are only footnotes
+                  return sentence.text.trim().length > 0;
                 })
                 .map((sentence, sentenceNumber) => {
                   const newSentenceId = getSentenceId({
