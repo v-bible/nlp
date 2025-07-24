@@ -1,7 +1,4 @@
-import {
-  type EntityAnnotation,
-  type SentenceEntityAnnotation,
-} from '@/lib/ner/schema';
+import { type SentenceEntityAnnotation } from '@/lib/ner/schema';
 import {
   type ChapterTreeOutput,
   ChapterTreeSchema,
@@ -29,7 +26,7 @@ const updateAnnotations = (
 };
 
 const resolveOverlapAnnotation = (
-  annotations: EntityAnnotation[],
+  annotations: SentenceEntityAnnotation[],
   options: {
     overlapKeepRight?: boolean;
   },
@@ -42,7 +39,7 @@ const resolveOverlapAnnotation = (
 
   // Sort annotations by start position (descending) for processing
   const sortedAnnotations = [...annotations].sort((a, b) => b.start - a.start);
-  const additionalAnnotations: EntityAnnotation[] = [];
+  const additionalAnnotations: SentenceEntityAnnotation[] = [];
 
   // Process overlaps in a single pass
   for (let i = 1; i < sortedAnnotations.length; i += 1) {
@@ -121,7 +118,7 @@ const resolveOverlapAnnotation = (
 
 const wrapNERLabel = (
   text: string,
-  annotations: EntityAnnotation[],
+  annotations: SentenceEntityAnnotation[],
 ): string => {
   if (annotations.length === 0) return text;
 
@@ -145,7 +142,8 @@ const wrapNERLabel = (
   // Pre-calculate tags to avoid repeated string operations
   const annotationsWithTags = sortedAnnotations.map((annotation) => ({
     ...annotation,
-    openingTag: `<${annotation.labels[0]!} ID="${annotation.id}">`,
+    // NOTE:
+    openingTag: `<${annotation.labels[0]!} SENTENCE_ID="${annotation.sentenceId}" SENTENCE_TYPE="${annotation.sentenceType}" LANGUAGE_CODE="${annotation.languageCode}">`,
     closingTag: `</${annotation.labels[0]!}>`,
   }));
 

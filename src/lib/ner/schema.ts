@@ -57,7 +57,9 @@ export const NerDataSchema = z.object({
     sentenceId: z.string(),
     sentenceType: SentenceTypeSchema,
     languageCode:
-      MultiLanguageSentenceSchema.shape.array.element.shape.languageCode.optional(),
+      MultiLanguageSentenceSchema.shape.array.element.shape.languageCode.or(
+        z.literal(''),
+      ),
     title: MetadataSchema.shape.title,
     genreCode: MetadataSchema.shape.genre.shape.code,
   }),
@@ -65,10 +67,12 @@ export const NerDataSchema = z.object({
 
 export type NerData = z.infer<typeof NerDataSchema>;
 
-export const SentenceEntityAnnotationSchema = EntityAnnotationSchema.extend({
+export const SentenceEntityAnnotationSchema = EntityAnnotationSchema.omit({
+  id: true,
+}).extend({
   sentenceId: z.string(),
   sentenceType: SentenceTypeSchema,
-  languageCode: LanguageCodeSchema.optional(),
+  languageCode: LanguageCodeSchema.or(z.literal('')),
 });
 
 export type SentenceEntityAnnotation = z.infer<
