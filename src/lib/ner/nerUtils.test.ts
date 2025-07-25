@@ -1,17 +1,41 @@
 import { describe, expect, test } from 'vitest';
 import { resolveOverlapAnnotation, wrapNERLabel } from '@/lib/ner/nerUtils';
-import { type EntityAnnotation } from '@/lib/ner/schema';
+import { type SentenceEntityAnnotation } from '@/lib/ner/schema';
 
 describe('wrapNERLabel', () => {
   test('should handle non-overlapping annotations', () => {
     const text = 'The quick brown fox jumps over the lazy dog.';
-    const annotations: EntityAnnotation[] = [
-      { start: 0, end: 3, text: 'The', labels: ['PER'], id: '1' },
-      { start: 4, end: 9, text: 'quick', labels: ['LOC'], id: '2' },
-      { start: 10, end: 15, text: 'brown', labels: ['ORG'], id: '3' },
+    const annotations: SentenceEntityAnnotation[] = [
+      {
+        start: 0,
+        end: 3,
+        text: 'The',
+        labels: ['PER'],
+        sentenceId: 'RCN_001.001.001.01',
+        sentenceType: 'single',
+        languageCode: '',
+      },
+      {
+        start: 4,
+        end: 9,
+        text: 'quick',
+        labels: ['LOC'],
+        sentenceId: 'RCN_001.001.002.01',
+        sentenceType: 'single',
+        languageCode: '',
+      },
+      {
+        start: 10,
+        end: 15,
+        text: 'brown',
+        labels: ['ORG'],
+        sentenceId: 'RCN_001.001.003.01',
+        sentenceType: 'single',
+        languageCode: '',
+      },
     ];
     const expected =
-      '<PER ID="1">The</PER> <LOC ID="2">quick</LOC> <ORG ID="3">brown</ORG> fox jumps over the lazy dog.';
+      '<PER SENTENCE_ID="RCN_001.001.001.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">The</PER> <LOC SENTENCE_ID="RCN_001.001.002.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">quick</LOC> <ORG SENTENCE_ID="RCN_001.001.003.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">brown</ORG> fox jumps over the lazy dog.';
 
     const result = wrapNERLabel(text, annotations);
     expect(result).toBe(expected);
@@ -19,25 +43,37 @@ describe('wrapNERLabel', () => {
 
   test('should handle overlapping annotations', () => {
     const text = 'The quick brown fox jumps over the lazy dog.';
-    const annotations: EntityAnnotation[] = [
-      { start: 0, end: 3, text: 'The', labels: ['PER'], id: '1' },
+    const annotations: SentenceEntityAnnotation[] = [
+      {
+        start: 0,
+        end: 3,
+        text: 'The',
+        labels: ['PER'],
+        sentenceId: 'RCN_001.001.001.01',
+        sentenceType: 'single',
+        languageCode: '',
+      },
       {
         start: 4,
         end: 19,
         text: 'quick brown fox',
         labels: ['LOC'],
-        id: '2',
+        sentenceId: 'RCN_001.001.002.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
       {
         start: 10,
         end: 25,
         text: 'brown fox jumps',
         labels: ['ORG'],
-        id: '3',
+        sentenceId: 'RCN_001.001.003.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
     ];
     const expected =
-      '<PER ID="1">The</PER> <LOC ID="2">quick </LOC><ORG ID="3"><LOC ID="2">brown fox</LOC> jumps</ORG> over the lazy dog.';
+      '<PER SENTENCE_ID="RCN_001.001.001.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">The</PER> <LOC SENTENCE_ID="RCN_001.001.002.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">quick </LOC><ORG SENTENCE_ID="RCN_001.001.003.01" SENTENCE_TYPE="single" LANGUAGE_CODE=""><LOC SENTENCE_ID="RCN_001.001.002.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">brown fox</LOC> jumps</ORG> over the lazy dog.';
 
     const result = wrapNERLabel(text, annotations);
     expect(result).toBe(expected);
@@ -45,25 +81,37 @@ describe('wrapNERLabel', () => {
 
   test('should handle contained annotations', () => {
     const text = 'The quick brown fox jumps over the lazy dog.';
-    const annotations: EntityAnnotation[] = [
-      { start: 0, end: 3, text: 'The', labels: ['PER'], id: '1' },
+    const annotations: SentenceEntityAnnotation[] = [
+      {
+        start: 0,
+        end: 3,
+        text: 'The',
+        labels: ['PER'],
+        sentenceId: 'RCN_001.001.001.01',
+        sentenceType: 'single',
+        languageCode: '',
+      },
       {
         start: 4,
         end: 25,
         text: 'quick brown fox jumps',
         labels: ['LOC'],
-        id: '2',
+        sentenceId: 'RCN_001.001.002.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
       {
         start: 10,
         end: 19,
         text: 'brown fox',
         labels: ['ORG'],
-        id: '3',
+        sentenceId: 'RCN_001.001.003.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
     ];
     const expected =
-      '<PER ID="1">The</PER> <LOC ID="2">quick <ORG ID="3">brown fox</ORG> jumps</LOC> over the lazy dog.';
+      '<PER SENTENCE_ID="RCN_001.001.001.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">The</PER> <LOC SENTENCE_ID="RCN_001.001.002.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">quick <ORG SENTENCE_ID="RCN_001.001.003.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">brown fox</ORG> jumps</LOC> over the lazy dog.';
 
     const result = wrapNERLabel(text, annotations);
     expect(result).toBe(expected);
@@ -71,7 +119,7 @@ describe('wrapNERLabel', () => {
 
   test('should return original text when no annotations are provided', () => {
     const text = 'The quick brown fox jumps over the lazy dog.';
-    const annotations: EntityAnnotation[] = [];
+    const annotations: SentenceEntityAnnotation[] = [];
 
     const result = wrapNERLabel(text, annotations);
     expect(result).toBe(text);
@@ -79,10 +127,19 @@ describe('wrapNERLabel', () => {
 
   test('should handle single annotation', () => {
     const text = 'Hello world';
-    const annotations: EntityAnnotation[] = [
-      { start: 0, end: 5, text: 'Hello', labels: ['PER'], id: '1' },
+    const annotations: SentenceEntityAnnotation[] = [
+      {
+        start: 0,
+        end: 5,
+        text: 'Hello',
+        labels: ['PER'],
+        sentenceId: 'RCN_001.001.001.01',
+        sentenceType: 'single',
+        languageCode: '',
+      },
     ];
-    const expected = '<PER ID="1">Hello</PER> world';
+    const expected =
+      '<PER SENTENCE_ID="RCN_001.001.001.01" SENTENCE_TYPE="single" LANGUAGE_CODE="">Hello</PER> world';
 
     const result = wrapNERLabel(text, annotations);
     expect(result).toBe(expected);
@@ -91,27 +148,33 @@ describe('wrapNERLabel', () => {
 
 describe('resolveOverlapAnnotation', () => {
   test('should handle non-overlapping annotations', () => {
-    const annotations: EntityAnnotation[] = [
+    const annotations: SentenceEntityAnnotation[] = [
       {
         start: 0,
         end: 3,
         text: 'The',
         labels: ['PER'],
-        id: '1',
+        sentenceId: 'RCN_001.001.001.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
       {
         start: 4,
         end: 9,
         text: 'quick',
         labels: ['LOC'],
-        id: '2',
+        sentenceId: 'RCN_001.001.002.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
       {
         start: 10,
         end: 15,
         text: 'brown',
         labels: ['ORG'],
-        id: '3',
+        sentenceId: 'RCN_001.001.003.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
     ];
 
@@ -126,39 +189,49 @@ describe('resolveOverlapAnnotation', () => {
       end: 3,
       text: 'The',
       labels: ['PER'],
-      id: '1',
+      sentenceId: 'RCN_001.001.001.01',
+      sentenceType: 'single',
+      languageCode: '',
     });
     expect(result[1]).toEqual({
       start: 4,
       end: 9,
       text: 'quick',
       labels: ['LOC'],
-      id: '2',
+      sentenceId: 'RCN_001.001.002.01',
+      sentenceType: 'single',
+      languageCode: '',
     });
     expect(result[2]).toEqual({
       start: 10,
       end: 15,
       text: 'brown',
       labels: ['ORG'],
-      id: '3',
+      sentenceId: 'RCN_001.001.003.01',
+      sentenceType: 'single',
+      languageCode: '',
     });
   });
 
   test('should resolve overlapping annotations with overlapKeepRight=true', () => {
-    const annotations: EntityAnnotation[] = [
+    const annotations: SentenceEntityAnnotation[] = [
       {
         start: 4,
         end: 19,
         text: 'quick brown fox',
         labels: ['LOC'],
-        id: '2',
+        sentenceId: 'RCN_001.001.002.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
       {
         start: 10,
         end: 25,
         text: 'brown fox jumps',
         labels: ['ORG'],
-        id: '3',
+        sentenceId: 'RCN_001.001.003.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
     ];
 
@@ -176,7 +249,9 @@ describe('resolveOverlapAnnotation', () => {
       end: 10,
       text: 'quick ',
       labels: ['LOC'],
-      id: '2',
+      sentenceId: 'RCN_001.001.002.01',
+      sentenceType: 'single',
+      languageCode: '',
     });
 
     // Original overlapping annotation
@@ -185,7 +260,9 @@ describe('resolveOverlapAnnotation', () => {
       end: 25,
       text: 'brown fox jumps',
       labels: ['ORG'],
-      id: '3',
+      sentenceId: 'RCN_001.001.003.01',
+      sentenceType: 'single',
+      languageCode: '',
     });
 
     // Second part of split annotation
@@ -194,25 +271,31 @@ describe('resolveOverlapAnnotation', () => {
       end: 19,
       text: 'brown fox',
       labels: ['LOC'],
-      id: '2',
+      sentenceId: 'RCN_001.001.002.01',
+      sentenceType: 'single',
+      languageCode: '',
     });
   });
 
   test('should handle contained annotations', () => {
-    const annotations: EntityAnnotation[] = [
+    const annotations: SentenceEntityAnnotation[] = [
       {
         start: 4,
         end: 25,
         text: 'quick brown fox jumps',
         labels: ['LOC'],
-        id: '2',
+        sentenceId: 'RCN_001.001.002.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
       {
         start: 10,
         end: 19,
         text: 'brown fox',
         labels: ['ORG'],
-        id: '3',
+        sentenceId: 'RCN_001.001.003.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
     ];
 
@@ -226,7 +309,7 @@ describe('resolveOverlapAnnotation', () => {
   });
 
   test('should handle empty annotations array', () => {
-    const annotations: EntityAnnotation[] = [];
+    const annotations: SentenceEntityAnnotation[] = [];
 
     const result = resolveOverlapAnnotation(annotations, {
       overlapKeepRight: true,
@@ -236,13 +319,15 @@ describe('resolveOverlapAnnotation', () => {
   });
 
   test('should handle single annotation', () => {
-    const annotations: EntityAnnotation[] = [
+    const annotations: SentenceEntityAnnotation[] = [
       {
         start: 0,
         end: 5,
         text: 'Hello',
         labels: ['PER'],
-        id: '1',
+        sentenceId: 'RCN_001.001.001.01',
+        sentenceType: 'single',
+        languageCode: '',
       },
     ];
 

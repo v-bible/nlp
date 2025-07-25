@@ -34,7 +34,7 @@ const mapTreeToNerData = (chapterTree: ChapterTreeOutput): NerData[] => {
             chapterId: chapterTree.root.file.sect.id,
             sentenceId: sentence.id,
             sentenceType: sentence.type,
-            languageCode: undefined,
+            languageCode: '',
             title: chapterTree.root.file.meta.title,
             genreCode: chapterTree.root.file.meta.genre.code,
           },

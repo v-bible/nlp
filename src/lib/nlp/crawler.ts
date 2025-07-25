@@ -1,5 +1,6 @@
 import path from 'path';
 import { ZodError, z } from 'zod/v4';
+import Bluebird, { withBluebirdTimeout } from '@/lib//bluebird';
 import {
   type Checkpoint,
   type WithCheckpointOptions,
@@ -53,7 +54,7 @@ export type GetChaptersFunction<
   resourceHref: CrawHref;
   documentParams: DocumentParams;
   metadata: Metadata;
-}) => Promise<Required<T>[]>;
+}) => Bluebird<Required<T>[]>;
 
 export type GetPageContentParams<
   T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
@@ -65,11 +66,11 @@ export type GetPageContentParams<
 
 export type GetPageContentFunction<
   T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
-> = (params: GetPageContentParams<T>) => Promise<PageInput[]>;
+> = (params: GetPageContentParams<T>) => Bluebird<PageInput[]>;
 
 export type GetPageContentMdFunction<
   T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
-> = (params: GetPageContentParams<T>) => Promise<string>;
+> = (params: GetPageContentParams<T>) => Bluebird<string>;
 
 export type GenerateMultipleTreesFunction = {
   extension: string;
@@ -110,6 +111,8 @@ class Crawler {
 
   checkpointOptions: WithCheckpointOptions<Metadata>;
 
+  timeout: number;
+
   constructor({
     name,
     domain,
@@ -125,6 +128,7 @@ class Crawler {
     checkpointFilePath,
     outputFileDir,
     checkpointOptions,
+    timeout,
   }: Omit<GenreParams, 'genre'> & {
     name: string;
     getMetadataBy: GetMetadataByFunction;
@@ -138,6 +142,7 @@ class Crawler {
     checkpointFilePath?: string;
     outputFileDir?: string;
     checkpointOptions?: WithCheckpointOptions<Metadata>;
+    timeout?: number;
   }) {
     this.name = name;
     this.domainParams = {
@@ -190,6 +195,9 @@ class Crawler {
     this.outputFileDir = outputFileDir;
 
     this.checkpointOptions = checkpointOptions || {};
+
+    // Default timeout of 15 minutes in milliseconds
+    this.timeout = timeout || 900000;
   }
 
   async getMetadataList() {
@@ -286,11 +294,15 @@ class Crawler {
 
       if (metadata.hasChapters) {
         try {
-          chapterCrawlList = await this.getChapters({
-            resourceHref: { href: metadata.sourceURL },
-            documentParams,
-            metadata,
-          });
+          chapterCrawlList = await withBluebirdTimeout(
+            () =>
+              this.getChapters({
+                resourceHref: { href: metadata.sourceURL },
+                documentParams,
+                metadata,
+              }),
+            this.timeout,
+          );
         } catch (error) {
           logger.error(
             `Error getting chapters for document ${metadata.documentId}:`,
@@ -314,11 +326,15 @@ class Crawler {
         };
 
         try {
-          const pageContent = await this.getPageContent({
-            resourceHref: { href, props },
-            chapterParams,
-            metadata,
-          });
+          const pageContent = await withBluebirdTimeout(
+            () =>
+              this.getPageContent({
+                resourceHref: { href, props },
+                chapterParams,
+                metadata,
+              }),
+            this.timeout,
+          );
 
           const parsePageRes = PageSchema.array().safeParse(pageContent);
 
@@ -353,11 +369,15 @@ class Crawler {
 
           if (this.getPageContentMd) {
             try {
-              const mdContent = await this.getPageContentMd({
-                resourceHref: { href, props },
-                chapterParams,
-                metadata,
-              });
+              const mdContent = await withBluebirdTimeout(
+                () =>
+                  this.getPageContentMd!({
+                    resourceHref: { href, props },
+                    chapterParams,
+                    metadata,
+                  }),
+                this.timeout,
+              );
 
               writeChapterContent({
                 params: chapterParams,

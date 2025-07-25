@@ -59,6 +59,7 @@
   - [Named Entity Recognition (NER)](#named-entity-recognition-ner)
     - [Entity Label Categories](#entity-label-categories)
     - [Setup Label Tools](#setup-label-tools)
+    - [Getting API Token](#getting-api-token)
     - [Label Procedure](#label-procedure)
 - [Contributing](#wave-contributing)
   - [Code of Conduct](#scroll-code-of-conduct)
@@ -82,14 +83,17 @@ your `.env` file:
 
 - **Label Studio configs:**
 
-  > [!NOTE]:
-  > These environments only required for `ner-processing` scripts to connect to
-  > Label Studio instance.
-
   - `LABEL_STUDIO_URL`: URL of the Label Studio instance. E.g.:
     `http://localhost:8080`.
   - `LABEL_STUDIO_LEGACY_TOKEN`: Legacy token for Label Studio API. You can
     generate it in the Label Studio settings page.
+  - `LABEL_STUDIO_PROJECT_TITLE`: Title of the Label Studio project. This is used to
+    import and export NER tasks, in `src/ner-processing/import-ner-task.ts` and
+    `src/ner-processing/export-ner-task.ts` scripts.
+
+> [!NOTE]
+> These environments only required for `ner-processing` scripts to connect to
+> Label Studio instance.
 
 E.g:
 
@@ -99,6 +103,7 @@ LOG_LEVEL=info
 
 LABEL_STUDIO_URL=http://localhost:8080
 LABEL_STUDIO_LEGACY_TOKEN=eyJhb***
+LABEL_STUDIO_PROJECT_TITLE=v-bible
 ```
 
 You can also check out the file `.env.example` to see all required environment
@@ -359,6 +364,12 @@ refer to the
 [v-bible/nlp-label-studio](https://github.com/v-bible/nlp-label-studio) for
 setuping Label Studio.
 
+#### Getting API Token
+
+To get Label Studio Legacy API token, go to
+`http://localhost:8080/organization` > `API Tokens Settings` > Check `Legacy
+Tokens` > `Save`.
+
 #### Label Procedure
 
 > [!NOTE]
@@ -390,11 +401,7 @@ The label procedure is as follows:
       It may contains annotated data from previous labeling sessions, these will
       be imported as ground truth data.
 
-      > [!NOTE]
-      > If the task has not been labeled yet, don't add any annotations to the
-      > task data, else it will be considered as ground truth data.
-
-      Sample data:
+    - Sample data:
 
       ```json
       [
@@ -451,6 +458,10 @@ The label procedure is as follows:
       ]
       ```
 
+> [!NOTE]
+> If the task has not been labeled yet, don't add any annotations to the
+> task data, else it will be considered as ground truth data.
+
 2.  Import NER tasks to Label Studio:
 
     - Import the NER tasks by creating a new project and selecting the `dist/task-data`
@@ -470,8 +481,14 @@ The label procedure is as follows:
 
     - Use script
       [`src/ner-processing/export-ner-task.ts`](./src/ner-processing/export-ner-task.ts)
-      to export the NER tasks from Label Studio and inject annotations into the
-      corpus data tree.
+      to export the NER tasks from Label Studio to `dist/task-data`.
+
+5.  Inject annotations to data tree:
+
+    - Use script
+      [`src/ner-processing/inject-annotation.ts`](./src/ner-processing/inject-annotation.ts)
+      to inject the annotations from `dist/task-data` to the corpus data tree in
+      `dist/corpus`.
 
 <!-- Contributing -->
 

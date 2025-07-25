@@ -249,7 +249,9 @@ const generateXmlTree = (chapterTree: ChapterTreeOutput): string => {
                       return x(
                         'ANNOTATION',
                         {
-                          ID: annotation?.id || '',
+                          SENTENCE_ID: annotation.sentenceId,
+                          SENTENCE_TYPE: annotation.sentenceType,
+                          LANGUAGE_CODE: annotation.languageCode,
                           START: annotation.start.toString(),
                           END: annotation.end.toString(),
                           LABEL: annotation.labels[0]!,
@@ -267,7 +269,8 @@ const generateXmlTree = (chapterTree: ChapterTreeOutput): string => {
   );
 
   // Convert the tree to XML string
-  return toXml(xmlTree).trim();
+  // REVIEW: Might have some "<" in the sentence, not the "<" opening tag
+  return toXml(xmlTree).replaceAll('&#x3C;', '<').trim();
 };
 
 const generateJsonTree = (chapterTree: ChapterTreeOutput): string => {
@@ -428,11 +431,17 @@ const generateDataTreeWithAnnotation = (
     {
       ...options,
       transformString: (str, { sentenceId, languageCode }) => {
-        const sentenceAnnotations = annotations.filter(
-          (annotation) =>
+        const sentenceAnnotations = annotations.filter((annotation) => {
+          const annotationLangCode =
+            annotation.languageCode === ''
+              ? undefined
+              : annotation.languageCode;
+
+          return (
             annotation.sentenceId === sentenceId &&
-            annotation?.languageCode === languageCode,
-        );
+            annotationLangCode === languageCode
+          );
+        });
 
         const newStr = wrapNERLabel(str, sentenceAnnotations);
 

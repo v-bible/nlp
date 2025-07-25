@@ -1,3 +1,4 @@
+import Bluebird from '@/lib/bluebird';
 import { Crawler } from '@/lib/nlp/crawler';
 import { getPageContent } from '@/thanhlinh.net/getPageContent';
 import { getPageContentMd } from '@/thanhlinh.net/getPageContentMd';
@@ -17,16 +18,18 @@ const main = async () => {
       // REVIEW: Currently we get non chapter pages first
       return !checkpoint.completed && !checkpoint.params.hasChapters;
     },
-    getChapters: async ({ resourceHref }) => {
-      // NOTE: These pages have no chapters
-      return [
-        {
-          href: resourceHref.href,
-          props: {
-            chapterNumber: 1,
+    getChapters: ({ resourceHref }) => {
+      return new Bluebird.Promise((resolve) => {
+        // NOTE: These pages have no chapters
+        resolve([
+          {
+            href: resourceHref.href,
+            props: {
+              chapterNumber: 1,
+            },
           },
-        },
-      ];
+        ]);
+      });
     },
     getPageContent,
     getPageContentMd,

@@ -1,27 +1,29 @@
 /* eslint-disable no-restricted-syntax */
 /* eslint-disable no-continue */
-import sentencize from '@stdlib/nlp-sentencize';
 import retry from 'async-retry';
 import { type Page, chromium, devices } from 'playwright';
+import Bluebird from '@/lib/bluebird';
 import { extractFootnote, removeAllFootnote } from '@/lib/md/footnoteUtils';
 import { extractHeading, removeAllHeading } from '@/lib/md/headingUtils';
 import {
   cleanupMdProcessor,
   normalizeAsterisk,
+  normalizeMd,
+  normalizeNumberBullet,
   normalizeQuotes,
   normalizeWhitespace,
-  removeBulletEscape,
   removeMdHr,
   removeMdImgs,
   removeMdLinks,
   removeRedundantSpaces,
   splitParagraph,
-  stripMd,
+  stripSymbols,
 } from '@/lib/md/mdUtils';
 import { parseMd } from '@/lib/md/remark';
 import { type GetPageContentFunction } from '@/lib/nlp/crawler';
 import { getPageId, getSentenceId } from '@/lib/nlp/getId';
 import { type Footnote, type SingleLanguageSentence } from '@/lib/nlp/schema';
+import { winkNLPInstance } from '@/lib/wink-nlp';
 import { logger } from '@/logger/logger';
 
 // NOTE: This function is specific to the hdgmvietnam.com website
@@ -87,149 +89,178 @@ const extractFootnoteRef = async (
   };
 };
 
-const getPageContent = (async ({ resourceHref, chapterParams }) => {
-  const { href } = resourceHref;
+const getPageContent = (({ resourceHref, chapterParams }) => {
+  return new Bluebird.Promise(async (resolve, reject, onCancel) => {
+    const { href } = resourceHref;
 
-  const browser = await chromium.launch();
-  const context = await browser.newContext(devices['Desktop Chrome']);
-  const page = await context.newPage();
+    const browser = await chromium.launch();
+    const context = await browser.newContext(devices['Desktop Chrome']);
+    const page = await context.newPage();
 
-  await retry(
-    async () => {
-      await page.goto(href);
-    },
-    {
-      retries: 5,
-    },
-  );
+    try {
+      // Set up cancellation handler after resources are created
+      onCancel!(async () => {
+        await page.close();
+        await context.close();
+        await browser.close();
 
-  await page.evaluate(() => {
-    // NOTE: Remove table element although remark-gfm still can parse it
-    document.querySelectorAll('table').forEach((el) => el.remove());
-  });
-
-  const { footnoteRefs, newString } = await extractFootnoteRef(page);
-
-  await context.close();
-  await browser.close();
-
-  const md = await parseMd(newString);
-
-  // NOTE: Footnote may have format: "[\[3\]](#footnote-link)" or
-  // "[**\[3\]**](#footnote-link)" or "[3](#footnote-link)"
-  const fnRegex =
-    /\[[^\\[]*(\\\[)?(?<label>[^\\]*)(\\\])?[^\\\]]*\]\(([^)]*)\)/gm;
-
-  const cleanupMd = cleanupMdProcessor(md, [
-    removeMdImgs,
-    (str) =>
-      removeMdLinks(str, {
-        useLinkAsAlt: false,
-      }),
-    removeMdHr,
-    (str) => {
-      return str.replaceAll(fnRegex, (subStr, ...props) => {
-        // NOTE: Label is the second capturing group
-        const label = props[1];
-        return `[${label}]`;
+        reject(new Error('Operation was cancelled'));
       });
-    },
-    removeBulletEscape,
-    // NOTE: Have to run first so the asterisk regex can match correctly
-    normalizeWhitespace,
-    normalizeAsterisk,
-    normalizeQuotes,
-    removeRedundantSpaces,
-  ]);
 
-  const paragraphs = splitParagraph(cleanupMd, {
-    headingAsParagraph: false,
-  });
+      await retry(
+        async () => {
+          await page.goto(href);
+        },
+        {
+          retries: 5,
+        },
+      );
 
-  const pageData = paragraphs.map((p, paragraphIdx) => {
-    const pageNumber = paragraphIdx + 1;
+      await page.evaluate(() => {
+        // NOTE: Remove table element although remark-gfm still can parse it
+        document.querySelectorAll('table').forEach((el) => el.remove());
+      });
 
-    const paragraphId = getPageId({
-      ...chapterParams,
-      pageNumber,
-    });
+      const { footnoteRefs, newString } = await extractFootnoteRef(page);
 
-    const paragraphHeadings = extractHeading(p);
+      await context.close();
+      await browser.close();
 
-    // NOTE: If there are any headings in the paragraph, we will remove them
-    p = removeAllHeading(p);
+      const md = await parseMd(newString);
 
-    const stripParagraph = stripMd(p).trim();
+      // NOTE: Footnote may have format: "[\[3\]](#footnote-link)" or
+      // "[**\[3\]**](#footnote-link)" or "[3](#footnote-link)"
+      const fnRegex =
+        /\[[^\\[]*(\\\[)?(?<label>[^\\]*)(\\\])?[^\\\]]*\]\(([^)]*)\)/gm;
 
-    // NOTE: Have to split markdown paragraphs by `\\\n` from markdown before
-    // splitting sentences
-    const sentences = stripParagraph
-      .split('\\\n')
-      .flatMap((subP) => sentencize(subP))
-      .map((sentence) => {
-        const footnotes = extractFootnote(sentence).flatMap((fnPos) => {
-          const footnoteRef = footnoteRefs.find(
-            (fnText) => fnText.label === fnPos.label,
-          );
-          if (!footnoteRef) {
-            logger.warn('Footnote text not found for label', {
-              href: resourceHref.href,
-              label: fnPos.label,
-            });
+      const cleanupMd = cleanupMdProcessor(md, [
+        removeMdImgs,
+        (str) =>
+          removeMdLinks(str, {
+            useLinkAsAlt: false,
+          }),
+        removeMdHr,
+        (str) => {
+          return str.replaceAll(fnRegex, (subStr, ...props) => {
+            // NOTE: Label is the second capturing group
+            const label = props[1];
+            return `[${label}]`;
+          });
+        },
+        // NOTE: Have to run first so the asterisk regex can match correctly
+        normalizeWhitespace,
+        normalizeAsterisk,
+        normalizeQuotes,
+        normalizeNumberBullet,
+        normalizeMd,
+        removeRedundantSpaces,
+      ]);
 
-            return [];
-          }
+      const paragraphs = splitParagraph(cleanupMd, {
+        headingAsParagraph: false,
+      });
 
-          return [
-            {
-              ...footnoteRef,
-              text: stripMd(footnoteRef.text).trim(),
-              position: fnPos.position,
-            },
-          ];
-        });
+      const pageData = paragraphs.map((p, paragraphIdx) => {
+        const pageNumber = paragraphIdx + 1;
 
-        return {
-          type: 'single',
-          text: removeAllFootnote(sentence),
-          footnotes,
-        } satisfies Omit<SingleLanguageSentence, 'id' | 'footnotes'> & {
-          footnotes: Footnote[];
-        };
-      })
-      .map((sentence, sentenceNumber) => {
-        const newSentenceId = getSentenceId({
+        const paragraphId = getPageId({
           ...chapterParams,
           pageNumber,
-          sentenceNumber: sentenceNumber + 1,
         });
+
+        const paragraphHeadings = extractHeading(p);
+
+        // NOTE: If there are any headings in the paragraph, we will remove them
+        p = removeAllHeading(p);
+
+        const stripParagraph = stripSymbols(p).trim();
+
+        // NOTE: Have to split markdown paragraphs by `\\\n` from markdown before
+        // splitting sentences
+        const sentences = stripParagraph
+          .split('\\\n')
+          .flatMap((subP) => winkNLPInstance.readDoc(subP).sentences().out())
+          .filter((sentence) => {
+            // NOTE: Filter out empty sentences
+            return sentence.trim().length > 0;
+          })
+          .map((sentence) => {
+            const footnotes = extractFootnote(sentence).flatMap((fnPos) => {
+              const footnoteRef = footnoteRefs.find(
+                (fnText) => fnText.label === fnPos.label,
+              );
+              if (!footnoteRef) {
+                logger.warn('Footnote text not found for label', {
+                  href: resourceHref.href,
+                  label: fnPos.label,
+                });
+
+                return [];
+              }
+
+              return [
+                {
+                  ...footnoteRef,
+                  text: stripSymbols(footnoteRef.text).trim(),
+                  position: fnPos.position,
+                },
+              ];
+            });
+
+            return {
+              type: 'single',
+              text: removeAllFootnote(sentence).trim(),
+              footnotes,
+            } satisfies Omit<SingleLanguageSentence, 'id' | 'footnotes'> & {
+              footnotes: Footnote[];
+            };
+          })
+          .filter((sentence) => {
+            // NOTE: Filter out sentences that are only footnotes
+            return sentence.text.length > 0;
+          })
+          .map((sentence, sentenceNumber) => {
+            const newSentenceId = getSentenceId({
+              ...chapterParams,
+              pageNumber,
+              sentenceNumber: sentenceNumber + 1,
+            });
+            return {
+              ...sentence,
+              id: newSentenceId,
+              footnotes: sentence.footnotes.map((fn, idx) => ({
+                ...fn,
+                order: idx,
+                sentenceId: newSentenceId,
+              })),
+              headings:
+                sentenceNumber === 0
+                  ? paragraphHeadings.map((heading) => ({
+                      ...heading,
+                      text: stripSymbols(heading.text).trim(),
+                      sentenceId: newSentenceId,
+                    }))
+                  : [],
+            } satisfies SingleLanguageSentence;
+          });
+
         return {
-          ...sentence,
-          id: newSentenceId,
-          footnotes: sentence.footnotes.map((fn, idx) => ({
-            ...fn,
-            order: idx,
-            sentenceId: newSentenceId,
-          })),
-          headings:
-            sentenceNumber === 0
-              ? paragraphHeadings.map((heading) => ({
-                  ...heading,
-                  text: stripMd(heading.text).trim(),
-                  sentenceId: newSentenceId,
-                }))
-              : [],
-        } satisfies SingleLanguageSentence;
+          id: paragraphId,
+          number: pageNumber,
+          sentences,
+        };
       });
 
-    return {
-      id: paragraphId,
-      number: pageNumber,
-      sentences,
-    };
-  });
+      resolve(pageData);
+    } catch (error) {
+      // Clean up resources on error
+      await page.close();
+      await context.close();
+      await browser.close();
 
-  return pageData;
+      reject(error);
+    }
+  });
 }) satisfies GetPageContentFunction;
 
 export { getPageContent };

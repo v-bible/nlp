@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { EntityAnnotationSchema } from '@/lib/ner/schema';
+import { SentenceEntityAnnotationSchema } from '@/lib/ner/schema';
 import {
   IdParamsSchema,
   MetadataSchema,
@@ -28,6 +28,7 @@ export const ChapterTreeSchema = z.object({
           .extend({
             sentences: SingleLanguageSentenceSchema.omit({
               footnotes: true,
+              headings: true,
             })
               .or(
                 MultiLanguageSentenceSchema.extend({
@@ -36,6 +37,8 @@ export const ChapterTreeSchema = z.object({
                       footnotes: true,
                     })
                     .array(),
+                }).omit({
+                  headings: true,
                 }),
               )
               .array(),
@@ -43,7 +46,7 @@ export const ChapterTreeSchema = z.object({
           .array(),
         footnotes: TreeFootnoteSchema.array().optional(),
         headings: SentenceHeadingSchema.array().optional(),
-        annotations: EntityAnnotationSchema.array().optional(),
+        annotations: SentenceEntityAnnotationSchema.array().optional(),
       }),
     }),
   }),

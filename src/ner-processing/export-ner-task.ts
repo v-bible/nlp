@@ -11,6 +11,8 @@ import 'dotenv/config';
 const main = async () => {
   const BASE_URL = process.env.LABEL_STUDIO_URL || 'http://localhost:8080';
   const LABEL_STUDIO_LEGACY_TOKEN = process.env.LABEL_STUDIO_LEGACY_TOKEN || '';
+  const LABEL_STUDIO_PROJECT_TITLE =
+    process.env.LABEL_STUDIO_PROJECT_TITLE || 'v-bible';
 
   const allProjects = await (
     await fetch(`${BASE_URL}/api/projects/`, {
@@ -22,8 +24,9 @@ const main = async () => {
     })
   ).json();
 
-  const vBibleProject = allProjects?.results?.find(
-    (project: Record<string, unknown>) => project.title === 'v-bible',
+  const projectInfo = allProjects?.results?.find(
+    (project: Record<string, unknown>) =>
+      project.title === LABEL_STUDIO_PROJECT_TITLE,
   );
 
   const snapShotBody = {
@@ -34,7 +37,7 @@ const main = async () => {
   };
 
   const snapShot = await (
-    await fetch(`${BASE_URL}/api/projects/${vBibleProject.id}/exports`, {
+    await fetch(`${BASE_URL}/api/projects/${projectInfo.id}/exports`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -50,7 +53,7 @@ const main = async () => {
 
   const snapShotData = await (
     await fetch(
-      `${BASE_URL}/api/projects/${vBibleProject.id}/exports/${
+      `${BASE_URL}/api/projects/${projectInfo.id}/exports/${
         snapShot.id
       }/download?${snapShotDownloadQuery.toString()}`,
       {
@@ -132,7 +135,7 @@ const main = async () => {
 
   // NOTE: Delete export snapshot
   await fetch(
-    `${BASE_URL}/api/projects/${vBibleProject.id}/exports/${snapShot.id}`,
+    `${BASE_URL}/api/projects/${projectInfo.id}/exports/${snapShot.id}`,
     {
       method: 'DELETE',
       headers: {
