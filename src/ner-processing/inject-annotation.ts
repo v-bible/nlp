@@ -94,6 +94,9 @@ const main = async () => {
 
     const newTree = updateAnnotations(tree, mapSentenceEntityAnnotation);
 
+    // NOTE: We don't need to wrap NER label in sentence for json tree
+    const jsonTree = generateJsonTree(newTree);
+
     const treeWithAnnotation = generateDataTreeWithAnnotation({
       chapterParams,
       metadata: newTree.root.file.meta,
@@ -101,7 +104,6 @@ const main = async () => {
       annotations: mapSentenceEntityAnnotation,
     });
 
-    const jsonTree = generateJsonTree(treeWithAnnotation);
     const xmlTree = generateXmlTree(treeWithAnnotation);
 
     writeChapterContent({

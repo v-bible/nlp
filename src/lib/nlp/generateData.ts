@@ -433,6 +433,8 @@ const generateDataTreeWithAnnotation = (
       transformString: (str, { sentenceId, languageCode }) => {
         const sentenceAnnotations = annotations.filter((annotation) => {
           const annotationLangCode =
+            // NOTE: languageCode in sentence doesn't accept empty string
+            // literal but in annotation does, so we need to handle it
             annotation.languageCode === ''
               ? undefined
               : annotation.languageCode;
