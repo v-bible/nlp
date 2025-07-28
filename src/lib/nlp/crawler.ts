@@ -398,7 +398,7 @@ class Crawler {
             }
           }
 
-          setCheckpointComplete(metadata.documentId, true);
+          setCheckpointComplete(checkpoint.id, true);
         } catch (error) {
           logger.error(
             `Error processing chapter ${props?.chapterNumber} for document ${metadata.documentId}:`,

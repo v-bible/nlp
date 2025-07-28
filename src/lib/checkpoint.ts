@@ -19,7 +19,7 @@ export type WithCheckpointOptions<T extends Record<string, unknown>> = {
 export type WithCheckpointParams<T extends Record<string, unknown>> = {
   getInitialData: () => Promise<T[]>;
   getCheckpointId: (item: T) => string;
-  filterCheckpoint?: (data: Checkpoint<T>) => boolean;
+  filterCheckpoint: (data: Checkpoint<T>) => boolean;
   sortCheckpoint?: (a: Checkpoint<T>, b: Checkpoint<T>) => number;
   filePath?: string;
   options?: WithCheckpointOptions<T>;

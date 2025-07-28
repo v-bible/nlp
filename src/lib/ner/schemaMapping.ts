@@ -6,9 +6,6 @@ const mapTreeToNerData = (chapterTree: ChapterTreeOutput): NerData[] => {
     (annotation) => {
       return {
         value: {
-          ...(annotation.id && {
-            id: annotation.id,
-          }),
           start: annotation.start,
           end: annotation.end,
           text: annotation.text,
