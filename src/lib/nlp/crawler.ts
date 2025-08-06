@@ -22,8 +22,10 @@ import {
   type MetadataRowCSVOutput,
   MetadataRowCSVSchema,
   MetadataSchema,
-  type PageInput,
+  type Page,
   PageSchema,
+  type SentenceHeading,
+  type TreeFootnote,
 } from '@/lib/nlp/schema';
 import { mapMetadataRowCSVToMetadata } from '@/lib/nlp/schemaMapping';
 import { logger } from '@/logger/logger';
@@ -66,7 +68,7 @@ export type GetPageContentParams<
 
 export type GetPageContentFunction<
   T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
-> = (params: GetPageContentParams<T>) => Bluebird<PageInput[]>;
+> = (params: GetPageContentParams<T>) => Bluebird<Page[]>;
 
 export type GetPageContentMdFunction<
   T extends GetChaptersFunctionHref = GetChaptersFunctionHref,
@@ -352,10 +354,35 @@ class Crawler {
           // eslint-disable-next-line no-restricted-syntax
           for (const { extension, generateTree } of this
             .generateMultipleTrees) {
+            const treeFootnotes = parsePageRes.data
+              .flatMap((page) => {
+                return page.sentences.flatMap((sentence) => {
+                  if (sentence.type === 'single') {
+                    return sentence?.footnotes || [];
+                  }
+
+                  return sentence.array.flatMap(
+                    (lang) => lang?.footnotes || [],
+                  );
+                });
+              })
+              .map((fn, idx) => ({
+                ...fn,
+                order: idx,
+              })) satisfies TreeFootnote[];
+
+            const treeHeadings = parsePageRes.data.flatMap((page) => {
+              return page.sentences.flatMap((sentence) => {
+                return sentence.headings || [];
+              });
+            }) satisfies SentenceHeading[];
+
             const tree = generateTree({
               chapterParams,
               metadata,
               pages: parsePageRes.data,
+              footnotes: treeFootnotes,
+              headings: treeHeadings,
             });
 
             writeChapterContent({

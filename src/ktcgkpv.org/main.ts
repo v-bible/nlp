@@ -20,7 +20,7 @@ import { getPageId, getSentenceId } from '@/lib/nlp/getId';
 import {
   type Footnote,
   type Heading,
-  type PageInput,
+  type Page,
   type SingleLanguageSentence,
 } from '@/lib/nlp/schema';
 import { winkNLPInstance } from '@/lib/wink-nlp';
@@ -270,7 +270,7 @@ const main = async () => {
                     })),
                   } satisfies SingleLanguageSentence;
                 }) || [],
-          } satisfies PageInput;
+          } satisfies Page;
         });
 
         resolve(pageData);

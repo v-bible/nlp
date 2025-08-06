@@ -101,6 +101,8 @@ const main = async () => {
       chapterParams,
       metadata: newTree.root.file.meta,
       pages: newTree.root.file.sect.pages,
+      footnotes: newTree.root.file.sect?.footnotes || [],
+      headings: newTree.root.file.sect?.headings || [],
       annotations: mapSentenceEntityAnnotation,
     });
 
