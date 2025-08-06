@@ -63,10 +63,13 @@ const main = async () => {
       return (
         task.annotations?.flatMap((annotation) => {
           return annotation.result.map((res) => ({
-            ...res.value,
+            text: res.value.text,
+            start: res.value.start,
+            end: res.value.end,
+            labels: res.value.labels,
             sentenceId: task.data.sentenceId,
-            sentenceType: task.data.sentenceType,
             languageCode: task.data.languageCode,
+            sentenceType: task.data.sentenceType,
           }));
         }) || []
       );

@@ -1,29 +1,33 @@
-import { type NerData } from '@/lib/ner/schema';
+import { type NerData, type SentenceEntityAnnotation } from '@/lib/ner/schema';
 import { type ChapterTreeOutput } from '@/lib/nlp/treeSchema';
 
-const mapTreeToNerData = (chapterTree: ChapterTreeOutput): NerData[] => {
-  const annotations = chapterTree?.root.file.sect.annotations?.map(
-    (annotation) => {
-      return {
-        value: {
-          start: annotation.start,
-          end: annotation.end,
-          text: annotation.text,
-          labels: annotation.labels,
-        },
-        // NOTE: This is hard-coded and should match with label studio template
-        // from README.md, especially the "to_name" key
-        from_name: 'label',
-        to_name: 'text',
-        type: 'labels',
-      };
+const mapAnnotationToNerResult = (annotation: SentenceEntityAnnotation) => {
+  return {
+    value: {
+      start: annotation.start,
+      end: annotation.end,
+      text: annotation.text,
+      labels: annotation.labels,
     },
-  );
+    // NOTE: This is hard-coded and should match with label studio template
+    // from README.md, especially the "to_name" key
+    from_name: 'label',
+    to_name: 'text',
+    type: 'labels',
+  };
+};
+
+const mapTreeToNerData = (chapterTree: ChapterTreeOutput): NerData[] => {
+  const annotations = chapterTree?.root.file.sect.annotations || [];
 
   return chapterTree.root.file.sect.pages
     .flatMap((page) => page.sentences)
     .map((sentence) => {
       if (sentence.type === 'single') {
+        const sentenceAnnotations = annotations
+          ?.filter((annotation) => annotation.sentenceId === sentence.id)
+          .map(mapAnnotationToNerResult);
+
         return {
           data: {
             text: sentence.text,
@@ -37,10 +41,10 @@ const mapTreeToNerData = (chapterTree: ChapterTreeOutput): NerData[] => {
           },
           // NOTE: DO NOT include empty annotations array because this will be
           // imported as ground truth data in Label Studio
-          ...(annotations && {
+          ...(sentenceAnnotations.length > 0 && {
             annotations: [
               {
-                result: annotations,
+                result: sentenceAnnotations,
               },
             ],
           }),
@@ -48,6 +52,10 @@ const mapTreeToNerData = (chapterTree: ChapterTreeOutput): NerData[] => {
       }
 
       return sentence.array.map((s) => {
+        const sentenceAnnotations = annotations
+          ?.filter((annotation) => annotation.sentenceId === sentence.id)
+          .map(mapAnnotationToNerResult);
+
         return {
           data: {
             text: s.text,
@@ -61,10 +69,10 @@ const mapTreeToNerData = (chapterTree: ChapterTreeOutput): NerData[] => {
           },
           // NOTE: DO NOT include empty annotations array because this will be
           // imported as ground truth data in Label Studio
-          ...(annotations && {
+          ...(sentenceAnnotations.length > 0 && {
             annotations: [
               {
-                result: annotations,
+                result: sentenceAnnotations,
               },
             ],
           }),
