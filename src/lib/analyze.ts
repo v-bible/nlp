@@ -4,6 +4,7 @@ import { ChapterTreeSchema } from '@/lib//nlp/treeSchema';
 
 interface FileStats {
   fileName: string;
+  genre: string;
   pageCount: number;
   sentenceCount: number;
   totalWords: number;
@@ -14,9 +15,13 @@ interface AggregatedStats {
   totalPages: number;
   totalSentences: number;
   totalWords: number;
+  bibleFiles: number;
+  biblePages: number;
+  bibleSentences: number;
+  bibleWords: number;
 }
 
-const analyzeFile = (filePath: string): FileStats => {
+const analyzeFile = (filePath: string, genre: string): FileStats => {
   const raw = fs.readFileSync(filePath, 'utf-8');
   const data = ChapterTreeSchema.parse(JSON.parse(raw));
   const { pages } = data.root.file.sect;
@@ -39,6 +44,7 @@ const analyzeFile = (filePath: string): FileStats => {
 
   return {
     fileName: path.basename(filePath),
+    genre,
     pageCount: pages.length,
     sentenceCount,
     totalWords,
@@ -52,6 +58,15 @@ const aggregateStats = (filesStats: FileStats[]): AggregatedStats => {
       acc.totalPages += file.pageCount;
       acc.totalSentences += file.sentenceCount;
       acc.totalWords += file.totalWords;
+
+      // Check if this is Bible-related data (genres N or O)
+      if (file.genre === 'N' || file.genre === 'O') {
+        acc.bibleFiles += 1;
+        acc.biblePages += file.pageCount;
+        acc.bibleSentences += file.sentenceCount;
+        acc.bibleWords += file.totalWords;
+      }
+
       return acc;
     },
     {
@@ -59,6 +74,10 @@ const aggregateStats = (filesStats: FileStats[]): AggregatedStats => {
       totalPages: 0,
       totalSentences: 0,
       totalWords: 0,
+      bibleFiles: 0,
+      biblePages: 0,
+      bibleSentences: 0,
+      bibleWords: 0,
     },
   );
 };
@@ -72,6 +91,33 @@ const printStats = (stats: AggregatedStats): void => {
   console.log(`🧠 Total words: ${stats.totalWords}`);
   console.log(
     `📏 Avg words per sentence: ${(stats.totalWords / stats.totalSentences).toFixed(2)}`,
+  );
+
+  console.log('\n📖 BIBLE DATA STATS (Genres N & O)');
+  console.log('-----------------------------------');
+  console.log(`📂 Bible files: ${stats.bibleFiles}`);
+  console.log(`📄 Bible pages: ${stats.biblePages}`);
+  console.log(`✉️ Bible sentences: ${stats.bibleSentences}`);
+  console.log(`🧠 Bible words: ${stats.bibleWords}`);
+  if (stats.bibleSentences > 0) {
+    console.log(
+      `📏 Avg words per Bible sentence: ${(stats.bibleWords / stats.bibleSentences).toFixed(2)}`,
+    );
+  }
+
+  console.log('\n📊 BIBLE vs TOTAL PERCENTAGE');
+  console.log('-----------------------------');
+  console.log(
+    `📂 Bible files: ${((stats.bibleFiles / stats.totalFiles) * 100).toFixed(1)}%`,
+  );
+  console.log(
+    `📄 Bible pages: ${((stats.biblePages / stats.totalPages) * 100).toFixed(1)}%`,
+  );
+  console.log(
+    `✉️ Bible sentences: ${((stats.bibleSentences / stats.totalSentences) * 100).toFixed(1)}%`,
+  );
+  console.log(
+    `🧠 Bible words: ${((stats.bibleWords / stats.totalWords) * 100).toFixed(1)}%`,
   );
 };
 
@@ -90,14 +136,17 @@ const main = (): void => {
           fs
             .readdirSync(documentFolder)
             .filter((file) => file.endsWith('.json'))
-            .map((file) => path.join(documentFolder, file)),
+            .map((file) => ({
+              filePath: path.join(documentFolder, file),
+              genre: genreFolder,
+            })),
         ),
     )
     .flat();
 
-  const statsPerFile = files.map((filePath) => {
+  const statsPerFile = files.map(({ filePath, genre }) => {
     console.log(`✅ Processing: ${filePath}`);
-    return analyzeFile(filePath);
+    return analyzeFile(filePath, genre);
   });
 
   const aggregated = aggregateStats(statsPerFile);
