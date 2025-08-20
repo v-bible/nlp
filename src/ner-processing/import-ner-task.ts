@@ -32,6 +32,12 @@ const main = async () => {
     })
   ).json();
 
+  if (allProjects?.status_code === 401) {
+    logger.error(
+      'Invalid Label Studio legacy token. Please check your environment variables.',
+    );
+  }
+
   const projectInfo = allProjects?.results?.find(
     (project: Record<string, unknown>) =>
       project.title === LABEL_STUDIO_PROJECT_TITLE,

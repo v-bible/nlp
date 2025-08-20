@@ -1,5 +1,3 @@
-import { readFileSync } from 'fs';
-import path from 'path';
 import { groupBy } from 'es-toolkit';
 import Bluebird from '@/lib/bluebird';
 import {
@@ -22,16 +20,18 @@ import { getPageId, getSentenceId } from '@/lib/nlp/getId';
 import {
   type Footnote,
   type Heading,
-  type PageInput,
+  type Page,
   type SingleLanguageSentence,
 } from '@/lib/nlp/schema';
 import { winkNLPInstance } from '@/lib/wink-nlp';
 import { logger } from '@/logger/logger';
 
 const main = async () => {
-  const bibleMetadata = JSON.parse(
-    readFileSync(path.join(__dirname, './metadata.json'), 'utf8'),
-  ) as Record<string, unknown>[];
+  const bibleChaptersMetadata = (await (
+    await fetch(
+      'https://huggingface.co/datasets/v-bible/catholic-resources/resolve/main/books/bible/versions/ktcgkpv.org/kt2011/metadata.json',
+    )
+  ).json()) as Record<string, unknown>[];
 
   const crawler = new Crawler({
     name: 'ktcgkpv.org',
@@ -52,11 +52,11 @@ const main = async () => {
       return new Bluebird.Promise((resolve) => {
         const bookCode = resourceHref.href.split('/').pop();
 
-        const currentBookMeta = bibleMetadata.find(
+        const currentBookMeta = bibleChaptersMetadata.find(
           (item) => item.code === bookCode,
         );
 
-        const baseURL = `https://huggingface.co/datasets/v-bible/bible/resolve/main/books/bible/versions/ktcgkpv/kt2011/${bookCode}`;
+        const baseURL = `https://huggingface.co/datasets/v-bible/bible/resolve/main/books/bible/versions/ktcgkpv.org/kt2011/${bookCode}`;
 
         resolve(
           (currentBookMeta?.chapters as Record<string, unknown>[])?.map(
@@ -78,13 +78,12 @@ const main = async () => {
         const {
           verses,
           footnotes = [],
-          references = [],
           headings = [],
         } = await (await fetch(resourceHref.href)).json();
 
         const groupByParagraph = groupBy(
           verses,
-          (item: Record<string, unknown>) => `${item.parNumber}`,
+          (item: Record<string, unknown>) => `${item.paragraphNumber}`,
         );
 
         const pageData = Object.keys(groupByParagraph).map((key) => {
@@ -107,9 +106,9 @@ const main = async () => {
                     )
                     .map((heading: Record<string, unknown>) => {
                       return {
-                        text: heading.content as string,
+                        text: heading.text as string,
                         level: heading.level as number,
-                        order: heading.order as number,
+                        order: heading.sortOrder as number,
                       };
                     }) as Heading[];
 
@@ -121,43 +120,41 @@ const main = async () => {
 
                   const verseFootnotes = footnotes
                     .filter(
-                      (fn: Record<string, unknown>) => fn.verseId === verse.id,
+                      (fn: Record<string, unknown>) =>
+                        fn.type === 'footnote' && fn.verseId === verse.id,
                     )
                     .map((fn: Record<string, unknown>) => {
                       return {
-                        text: fn.content as string,
+                        text: fn.text as string,
                         position: fn.position as number,
-                        label: `${(fn.order as number) + 1}` as string,
+                        label: `${(fn.sortOrder as number) + 1}` as string,
                       };
                     });
 
-                  const verseRefs = references
+                  const verseRefs = footnotes
                     .filter(
-                      (ref: Record<string, unknown>) =>
-                        ref.verseId === verse.id,
+                      (fn: Record<string, unknown>) =>
+                        fn.type === 'reference' && fn.verseId === verse.id,
                     )
-                    .map((ref: Record<string, unknown>) => {
+                    .map((fn: Record<string, unknown>) => {
                       return {
-                        text: ref.content as string,
-                        position: ref.position as number,
+                        text: fn.text as string,
+                        position: fn.position as number,
                         // NOTE: We add asterisk to the label to indicate it's a
                         // reference and not a footnote.
-                        label: `${(ref.order as number) + 1}@`,
+                        label: `${(fn.sortOrder as number) + 1}@`,
                       };
                     });
 
-                  const cleanupMd = cleanupMdProcessor(
-                    verse.content as string,
-                    [
-                      // NOTE: Have to run first so the asterisk regex can match correctly
-                      normalizeWhitespace,
-                      normalizeAsterisk,
-                      normalizeQuotes,
-                      normalizeNumberBullet,
-                      normalizeMd,
-                      removeRedundantSpaces,
-                    ],
-                  );
+                  const cleanupMd = cleanupMdProcessor(verse.text as string, [
+                    // NOTE: Have to run first so the asterisk regex can match correctly
+                    normalizeWhitespace,
+                    normalizeAsterisk,
+                    normalizeQuotes,
+                    normalizeNumberBullet,
+                    normalizeMd,
+                    removeRedundantSpaces,
+                  ]);
 
                   // NOTE: Have to run before stripping markdown to prevent
                   // position of footnotes and refs from being changed.
@@ -232,12 +229,13 @@ const main = async () => {
                         headings: idx === 0 ? verseHeadings : [],
                         footnotes: sentenceFootnotes,
                         extraAttributes: {
-                          verseNumber: verse.number as number,
-                          verseOrder: verse.order as number,
+                          number: verse.number as number,
+                          subVerseIndex: verse.subVerseIndex as number,
                           // NOTE: Start from 0 for parNumber and parIndex
-                          parNumber: verse.parNumber as number,
-                          parIndex: verse.parIndex as number,
+                          paragraphNumber: verse.paragraphNumber as number,
+                          paragraphIndex: verse.paragraphIndex as number,
                           isPoetry: verse.isPoetry as boolean,
+                          label: verse.label as string,
                         },
                       } satisfies Omit<
                         SingleLanguageSentence,
@@ -272,7 +270,7 @@ const main = async () => {
                     })),
                   } satisfies SingleLanguageSentence;
                 }) || [],
-          } satisfies PageInput;
+          } satisfies Page;
         });
 
         resolve(pageData);

@@ -63,10 +63,13 @@ const main = async () => {
       return (
         task.annotations?.flatMap((annotation) => {
           return annotation.result.map((res) => ({
-            ...res.value,
+            text: res.value.text,
+            start: res.value.start,
+            end: res.value.end,
+            labels: res.value.labels,
             sentenceId: task.data.sentenceId,
-            sentenceType: task.data.sentenceType,
             languageCode: task.data.languageCode,
+            sentenceType: task.data.sentenceType,
           }));
         }) || []
       );
@@ -94,14 +97,18 @@ const main = async () => {
 
     const newTree = updateAnnotations(tree, mapSentenceEntityAnnotation);
 
+    // NOTE: We don't need to wrap NER label in sentence for json tree
+    const jsonTree = generateJsonTree(newTree);
+
     const treeWithAnnotation = generateDataTreeWithAnnotation({
       chapterParams,
       metadata: newTree.root.file.meta,
       pages: newTree.root.file.sect.pages,
+      footnotes: newTree.root.file.sect?.footnotes || [],
+      headings: newTree.root.file.sect?.headings || [],
       annotations: mapSentenceEntityAnnotation,
     });
 
-    const jsonTree = generateJsonTree(treeWithAnnotation);
     const xmlTree = generateXmlTree(treeWithAnnotation);
 
     writeChapterContent({

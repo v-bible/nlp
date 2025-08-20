@@ -278,5 +278,3 @@ export const PageSchema = z.object({
 });
 
 export type Page = z.infer<typeof PageSchema>;
-export type PageInput = z.input<typeof PageSchema>;
-export type PageOutput = z.output<typeof PageSchema>;

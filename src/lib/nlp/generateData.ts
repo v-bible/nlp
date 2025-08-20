@@ -11,8 +11,7 @@ import {
   type LanguageCode,
   type MetadataInput,
   MetadataSchema,
-  type PageInput,
-  PageSchema,
+  type Page,
   type Sentence,
   type SentenceHeading,
   type TreeFootnote,
@@ -60,7 +59,10 @@ export const defaultParseDate = (date: string): Date => {
 export type GenerateTreeParams = {
   chapterParams: ChapterParams;
   metadata: MetadataInput;
-  pages: PageInput[];
+  pages: Page[];
+  footnotes: TreeFootnote[];
+  headings: SentenceHeading[];
+  annotations?: SentenceEntityAnnotation[];
 };
 
 export type GenerateTreeOptions = {
@@ -198,69 +200,66 @@ const generateXmlTree = (chapterTree: ChapterTreeOutput): string => {
                 );
               }),
 
-              chapterTree.root.file.sect.footnotes &&
-                x(
-                  'FOOTNOTES',
-                  {},
-                  ...generateIndent(
-                    4,
-                    chapterTree.root.file.sect.footnotes.map((footnote) => {
-                      return x(
-                        'FOOTNOTE',
-                        {
-                          SENTENCE_ID: footnote.sentenceId,
-                          LABEL: footnote.label,
-                          POSITION: footnote.position,
-                          ORDER: footnote.order,
-                        },
-                        footnote.text,
-                      );
-                    }) || [],
-                  ),
+              x(
+                'FOOTNOTES',
+                {},
+                ...generateIndent(
+                  4,
+                  chapterTree.root.file.sect.footnotes?.map((footnote) => {
+                    return x(
+                      'FOOTNOTE',
+                      {
+                        SENTENCE_ID: footnote.sentenceId,
+                        LABEL: footnote.label,
+                        POSITION: footnote.position,
+                        ORDER: footnote.order,
+                      },
+                      footnote.text,
+                    );
+                  }) || [],
                 ),
+              ),
 
-              chapterTree.root.file.sect.headings &&
-                x(
-                  'HEADINGS',
-                  {},
-                  ...generateIndent(
-                    4,
-                    chapterTree.root.file.sect.headings.map((heading) => {
-                      return x(
-                        'HEADING',
-                        {
-                          SENTENCE_ID: heading.sentenceId,
-                          LEVEL: heading.level,
-                          ORDER: heading.order,
-                        },
-                        heading.text,
-                      );
-                    }) || [],
-                  ),
+              x(
+                'HEADINGS',
+                {},
+                ...generateIndent(
+                  4,
+                  chapterTree.root.file.sect.headings?.map((heading) => {
+                    return x(
+                      'HEADING',
+                      {
+                        SENTENCE_ID: heading.sentenceId,
+                        LEVEL: heading.level,
+                        ORDER: heading.order,
+                      },
+                      heading.text,
+                    );
+                  }) || [],
                 ),
+              ),
 
-              chapterTree.root.file.sect.annotations &&
-                x(
-                  'ANNOTATIONS',
-                  {},
-                  ...generateIndent(
-                    4,
-                    chapterTree.root.file.sect.annotations.map((annotation) => {
-                      return x(
-                        'ANNOTATION',
-                        {
-                          SENTENCE_ID: annotation.sentenceId,
-                          SENTENCE_TYPE: annotation.sentenceType,
-                          LANGUAGE_CODE: annotation.languageCode,
-                          START: annotation.start.toString(),
-                          END: annotation.end.toString(),
-                          LABEL: annotation.labels[0]!,
-                        },
-                        annotation.text,
-                      );
-                    }) || [],
-                  ),
+              x(
+                'ANNOTATIONS',
+                {},
+                ...generateIndent(
+                  4,
+                  chapterTree.root.file.sect.annotations?.map((annotation) => {
+                    return x(
+                      'ANNOTATION',
+                      {
+                        SENTENCE_ID: annotation.sentenceId,
+                        SENTENCE_TYPE: annotation.sentenceType,
+                        LANGUAGE_CODE: annotation.languageCode,
+                        START: annotation.start.toString(),
+                        END: annotation.end.toString(),
+                        LABEL: annotation.labels[0]!,
+                      },
+                      annotation.text,
+                    );
+                  }) || [],
                 ),
+              ),
             ]),
           ),
         ]),
@@ -282,8 +281,10 @@ const generateDataTree = (
     chapterParams,
     metadata,
     pages,
+    footnotes,
+    headings,
     annotations,
-  }: GenerateTreeParams & { annotations?: SentenceEntityAnnotation[] },
+  }: GenerateTreeParams,
   options?: GenerateTreeOptions,
 ): ChapterTreeOutput => {
   const {
@@ -313,29 +314,6 @@ const generateDataTree = (
       },
     ),
   }).parse(metadata);
-
-  const parsedPages = PageSchema.array().parse(pages);
-
-  const treeFootnotes = parsedPages
-    .flatMap((page) => {
-      return page.sentences.flatMap((sentence) => {
-        if (sentence.type === 'single') {
-          return sentence?.footnotes || [];
-        }
-
-        return sentence.array.flatMap((lang) => lang?.footnotes || []);
-      });
-    })
-    .map((fn, idx) => ({
-      ...fn,
-      order: idx,
-    })) satisfies TreeFootnote[];
-
-  const treeHeadings = parsedPages.flatMap((page) => {
-    return page.sentences.flatMap((sentence) => {
-      return sentence.headings || [];
-    });
-  }) satisfies SentenceHeading[];
 
   const documentId = getDocumentId({
     domain: chapterParams.domain,
@@ -370,7 +348,7 @@ const generateDataTree = (
           id: chapterId,
           name: parsedChapterParams.chapterName,
           number: parsedChapterParams.chapterNumber,
-          pages: parsedPages.map((page) => {
+          pages: pages.map((page) => {
             return {
               id: page.id,
               number: page.number,
@@ -403,8 +381,8 @@ const generateDataTree = (
               }) satisfies Sentence[],
             };
           }),
-          footnotes: treeFootnotes,
-          headings: treeHeadings,
+          footnotes,
+          headings,
           annotations,
         },
       },
@@ -422,17 +400,21 @@ const generateDataTreeWithAnnotation = (
     chapterParams,
     metadata,
     pages,
+    footnotes,
+    headings,
     annotations,
   }: GenerateTreeParams & { annotations: SentenceEntityAnnotation[] },
   options?: GenerateTreeOptions,
 ): ChapterTreeOutput => {
   return generateDataTree(
-    { chapterParams, metadata, pages, annotations },
+    { chapterParams, metadata, pages, footnotes, headings, annotations },
     {
       ...options,
       transformString: (str, { sentenceId, languageCode }) => {
         const sentenceAnnotations = annotations.filter((annotation) => {
           const annotationLangCode =
+            // NOTE: languageCode in sentence doesn't accept empty string
+            // literal but in annotation does, so we need to handle it
             annotation.languageCode === ''
               ? undefined
               : annotation.languageCode;
