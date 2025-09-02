@@ -59,8 +59,7 @@ const resolveOverlapAnnotation = (
     } else if (
       // NOTE: Overlapping case
       prev.start < current.end &&
-      prev.end > current.start &&
-      prev.start < current.end
+      prev.end > current.start
     ) {
       // NOTE: If overlapKeepRight is true then we keep "prev" (as right reversed)
       // annotation, update end of the "current" annotation to the start of
