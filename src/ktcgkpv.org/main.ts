@@ -77,7 +77,7 @@ const main = async () => {
       return new Bluebird.Promise(async (resolve) => {
         const {
           verses,
-          footnotes = [],
+          marks: footnotes = [],
           headings = [],
         } = await (await fetch(resourceHref.href)).json();
 
@@ -121,12 +121,14 @@ const main = async () => {
                   const verseFootnotes = footnotes
                     .filter(
                       (fn: Record<string, unknown>) =>
-                        fn.type === 'footnote' && fn.verseId === verse.id,
+                        fn.kind === 'MARK_KIND_FOOTNOTE' &&
+                        fn.targetType === 'MARK_TARGET_TYPE_VERSE' &&
+                        fn.targetId === verse.id,
                     )
                     .map((fn: Record<string, unknown>) => {
                       return {
-                        text: fn.text as string,
-                        position: fn.position as number,
+                        text: fn.content as string,
+                        position: fn.startOffset as number,
                         label: `${(fn.sortOrder as number) + 1}` as string,
                       };
                     });
@@ -134,12 +136,14 @@ const main = async () => {
                   const verseRefs = footnotes
                     .filter(
                       (fn: Record<string, unknown>) =>
-                        fn.type === 'reference' && fn.verseId === verse.id,
+                        fn.kind === 'MARK_KIND_REFERENCE' &&
+                        fn.targetType === 'MARK_TARGET_TYPE_VERSE' &&
+                        fn.targetId === verse.id,
                     )
                     .map((fn: Record<string, unknown>) => {
                       return {
-                        text: fn.text as string,
-                        position: fn.position as number,
+                        text: fn.content as string,
+                        position: fn.startOffset as number,
                         // NOTE: We add asterisk to the label to indicate it's a
                         // reference and not a footnote.
                         label: `${(fn.sortOrder as number) + 1}@`,
